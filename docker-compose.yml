@@ -1,0 +1,21 @@
+services:
+  backend:
+    build: ./backend
+    container_name: runi-backend
+    volumes:
+      - ./backend:/app   # Mount local code for hot reload
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_ENV=development
+
+  frontend:
+    build: ./frontend
+    container_name: runi-frontend
+    volumes:
+      - ./frontend:/app  # Mount local code for hot reload
+    ports:
+      - "8080:5173"      # Vite dev server
+    depends_on:
+      - backend
