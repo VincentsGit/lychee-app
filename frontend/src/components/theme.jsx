@@ -13,8 +13,8 @@ const lightPalette = {
     dark: '#C97A3D',
   },
   background: {
-    default: '#F3F0FA',
-    paper: '#FAF9FD',
+    default: '#d1bfffff',
+    paper: '#ddd1ffff',
   },
   text: {
     primary: '#2C2738',
