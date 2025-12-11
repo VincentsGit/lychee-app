@@ -1,17 +1,23 @@
 import React, { useState } from 'react';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
-import { Container, Typography, Box, Button, CssBaseline } from '@mui/material';
-import { ThemeProvider } from '@mui/material/styles';
+import { Container, Typography, Box, Button, CssBaseline, Link as MUILink } from '@mui/material';
+import { ThemeProvider,  responsiveFontSizes } from '@mui/material/styles';
+import { BrowserRouter, Routes, Route, Link as RouterLink } from 'react-router-dom';
+import About from './pages/About';
 import { getTheme } from './components/theme';
 import Paper from '@mui/material/Paper';
 import Drawer from '@mui/material/Drawer';
 import MenuIcon from '@mui/icons-material/Menu';
 import IconButton from '@mui/material/IconButton';
-import PandaIcon from '../public/icons/panda.png';
+import PandaIcon from './icons/panda.png';
 import Toolbar from '@mui/material/Toolbar';
 import AppBar from '@mui/material/AppBar';
 import Divider from '@mui/material/Divider';
+import lavenderGif from './icons/lavender.gif';
+import flowersGif from './icons/flowers.gif';
+import pandaMenuGif from './icons/panda_menu.gif';
+import selfie from './images/selfie.jpeg';
 
 function App() {
   const [mode, setMode] = useState('dark');
@@ -32,25 +38,38 @@ function App() {
     <div>
       <Box sx={{ display: "flex", justifyContent: "center" }}>
         <img
-          src="../public/icons/panda_menu.gif"
+          src={pandaMenuGif}
           alt="logo"
           style={{ width: "50%", borderRadius: 8 }}
         />
       </Box>
       <Divider />
       <Box sx={{ textAlign: 'center', mt: 2 }}>
-        {navItems.map(item => (
-          <Typography key={item} sx={{ p: 2 }}>
-            {item}
-          </Typography>
-        ))}
+        {navItems.map(item => {
+          const to = item === 'Home' ? '/' : `/${item.toLowerCase()}`;
+          return (
+            <Typography key={item} sx={{ p: 0 }}>
+              <MUILink
+                component={RouterLink}
+                to={to}
+                underline="none"
+                color="inherit"
+                sx={{ display: 'block', p: 2 }}
+                onClick={() => { if (mobileOpen) handleDrawerToggle(); }}
+              >
+                {item}
+              </MUILink>
+            </Typography>
+          );
+        })}
       </Box>
     </div>
   );
 
   return (
-    <ThemeProvider theme={getTheme(mode)}>
+    <ThemeProvider theme={responsiveFontSizes(getTheme(mode))}>
       <CssBaseline />
+      <BrowserRouter>
       <Container sx={{ minHeight: '100vh', minWidth: '100vw', p: 1 }}>
 
         <AppBar
@@ -102,8 +121,8 @@ function App() {
               {/* Left GIF */}
               <Box
                 component="img"
-                src="/icons/lavender.gif"
-                alt="left"
+                src={lavenderGif}
+                alt="Lavender"
                 sx={{ width: {xs: "30px", md: "50px"}, mr: { md: 2} }}
               />
 
@@ -121,8 +140,8 @@ function App() {
               {/* Right GIF */}
               <Box
                 component="img"
-                src="/icons/flowers.gif"
-                alt="right"
+                src={flowersGif}
+                alt="Flowers"
                 sx={{ width: {xs: "40px", md: "70px"}, ml: { md: 2} }}
               />
             </Box>
@@ -169,20 +188,50 @@ function App() {
           {drawer}
         </Drawer>
 
-        {/* FIXED: Add margin below fixed header */}
         <Box sx={{ mt: 12, ml: { xs: 0, md: `${drawerWidth}px` }, p: 2 }}>
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <Container sx={{ mt: { xs: 0, md: 4 }, pr: { xs: 2, md: 6 } }}>
+                  <Typography variant="h2">Welcome to my website!</Typography>
+                  <Typography variant="body1" sx={{ mt: 4 }}>
+                    This is a website that was built by my lovely boyfriend that I'm using to write my thoughts down.
+                  </Typography>
+                  <Typography variant="body1" sx={{ mt: 1 }}>
+                    If you like the website, please hire my boyfriend as a software engineer! He is very talented and hardworking.
+                  </Typography>
+                  <Typography variant="body1" sx={{ mt: 4 }}>
+                    Here's a cute selfie of us:
+                  </Typography>
+                  <Box
+                    component="img"
+                    src={selfie}
+                    alt="Selfie"
+                    sx={{ display: 'block', mx: 'auto', width: { xs: '75vw', md: '30vw' }, borderRadius: 4, mt: 4 }}
+                  />
+                </Container>
+              }
+            />
 
+            <Route path="/about" element={<About />} />
 
-          <Button variant="contained" onClick={toggleMode}>
-            {mode === 'light' ? <DarkModeIcon /> : <LightModeIcon />}
-          </Button>
-
-          <Typography sx={{ mt: 2 }}>
-            This is a sample text in {mode} mode.
-          </Typography>
+            <Route
+              path="/contact"
+              element={
+                <Container sx={{ mt: { xs: 0, md: 4 }, pr: { xs: 2, md: 6 } }}>
+                  <Typography variant="h2">Contact</Typography>
+                  <Typography variant="body1" sx={{ mt: 2 }}>
+                    Contact page coming soon.
+                  </Typography>
+                </Container>
+              }
+            />
+          </Routes>
         </Box>
 
       </Container>
+      </BrowserRouter>
     </ThemeProvider>
   );
 }

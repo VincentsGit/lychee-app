@@ -1,4 +1,4 @@
-# runi's trenches (A simple Blog Website)
+# lychee (A simple Blog Website)
 
 ## About
 
