@@ -1,13 +1,45 @@
 import sqlite3
 from werkzeug.security import check_password_hash
-from flask import Flask, g, request, jsonify, make_response
+from flask import Flask, g, request, jsonify, make_response, send_from_directory
 from flask_cors import CORS # type: ignore
 import secrets
 from datetime import datetime, timedelta
+import os
 
 app = Flask(__name__)
 app.config["DATABASE"] = "instance/app.db"
 CORS(app, supports_credentials=True)  # allow all origins
+
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+@app.route("/upload", methods=["POST"])
+def upload_image():
+    if "file" not in request.files:
+        return {"error": "No file part"}, 400
+    
+    file = request.files["file"]
+    
+    if file.filename == "":
+        return {"error": "No selected file"}, 400
+    
+    # Optional: validate file type
+    if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif")):
+        return {"error": "Invalid file type"}, 400
+
+    # Save the file
+    filename = secrets.token_hex(16) + os.path.splitext(file.filename)[1]
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(file_path)
+
+    # Return URL to access the image
+    url = f"http://localhost:5000/uploads/{filename}"
+    return {"url": url}
+
+# Serve uploaded images
+@app.route("/uploads/<filename>")
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 def get_db():
     if "db" not in g:
@@ -56,7 +88,7 @@ def login():
     )
     db.commit()
 
-    resp = make_response(jsonify({"message": "Login successful"}))
+    resp = make_response(jsonify({"user_id": user["id"], "message": "Login successful"}))
     resp.set_cookie(
         "session_id",
         session_id,

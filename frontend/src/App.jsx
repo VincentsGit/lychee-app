@@ -6,7 +6,9 @@ import { ThemeProvider, responsiveFontSizes } from '@mui/material/styles';
 import { BrowserRouter, Routes, Route, Link as RouterLink } from 'react-router-dom';
 import About from './pages/About';
 import Socials from './pages/Socials';
+import Blog from './pages/Blog';
 import Login from './pages/Login';
+import Create from './pages/Create';
 import { getTheme } from './components/theme';
 import Paper from '@mui/material/Paper';
 import Drawer from '@mui/material/Drawer';
@@ -22,10 +24,20 @@ function App() {
   const [mode, setMode] = useState('dark');
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userId, setUserId] = useState(null);
 
   useEffect(() => {
     fetch("http://localhost:5000/me", { credentials: "include" })
-      .then(res => res.ok && setIsLoggedIn(true));
+      .then(res => {
+        if (!res.ok) return;
+        return res.json();
+      })
+      .then(data => {
+        if (data && data.user && data.user.id) {
+          setIsLoggedIn(true);
+          setUserId(data.user.id);
+        }
+      });
   }, []);
 
   const toggleMode = () => {
@@ -37,7 +49,7 @@ function App() {
   };
 
   const drawerWidth = 240;
-  const navItems = ['Home', 'About', 'Socials'];
+  const navItems = ['Home', 'About', 'Blog', 'Socials'];
   if (!isLoggedIn) {
     navItems.push('Login');
   }
@@ -58,18 +70,21 @@ function App() {
 
           if (item === 'Login' && !isLoggedIn) {
             return (
-              <Typography key={item} sx={{ p: 0 }}>
-                <MUILink
-                  component={RouterLink}
-                  to={to}
-                  underline="none"
-                  color="inherit"
-                  sx={{ display: 'block', p: 2 }}
-                  onClick={() => { if (mobileOpen) handleDrawerToggle(); }}
-                >
-                  {item}
-                </MUILink>
-              </Typography>
+              <React.Fragment key={item}>
+                <Divider sx={{ mt: 2 }} />
+                <Typography sx={{ mt: 2 }}>
+                  <MUILink
+                    component={RouterLink}
+                    to={to}
+                    underline="none"
+                    color="inherit"
+                    sx={{ display: 'block', p: 2, mt: 2 }}
+                    onClick={() => { if (mobileOpen) handleDrawerToggle(); }}
+                  >
+                    {item}
+                  </MUILink>
+                </Typography>
+              </React.Fragment>
             );
           }
 
@@ -95,7 +110,7 @@ function App() {
           }
 
           return (
-            <Typography key={item} sx={{ p: 0 }}>
+            <Typography key={item}>
               <MUILink
                 component={RouterLink}
                 to={to}
@@ -112,24 +127,44 @@ function App() {
 
         {/* If logged in, add Logout manually */}
         {isLoggedIn && (
-          <MUILink
-            component={RouterLink}
-            to={"/"}
-            key="logout"
-            underline="none"
-            color="inherit"
-            onClick={() => {
-              setIsLoggedIn(false);
-              fetch('http://localhost:5000/logout', {
-                method: 'POST',
-                credentials: 'include',
-              });
-              if (mobileOpen) handleDrawerToggle();
-            }}
-            sx={{ display: 'block', p: 2, cursor: 'pointer' }}
-          >
-            Logout
-          </MUILink>
+          <React.Fragment>
+            <Divider sx={{ my: 2 }} />
+            {userId === 1 && (
+              <>
+                <Typography>
+                  <MUILink
+                    component={RouterLink}
+                    to={"/create"}
+                    underline="none"
+                    color="inherit"
+                    onClick={() => { if (mobileOpen) handleDrawerToggle(); }}
+                    sx={{ display: 'block', p: 2, cursor: 'pointer' }}
+                  >
+                    Create Post
+                  </MUILink>
+                </Typography>
+              </>
+            )}
+            <Typography>
+              <MUILink
+                component={RouterLink}
+                to={"/"}
+                underline="none"
+                color="inherit"
+                onClick={() => {
+                  setIsLoggedIn(false);
+                  fetch('http://localhost:5000/logout', {
+                    method: 'POST',
+                    credentials: 'include',
+                  });
+                  if (mobileOpen) handleDrawerToggle();
+                }}
+                sx={{ display: 'block', p: 2, cursor: 'pointer' }}
+              >
+                Logout
+              </MUILink>
+            </Typography>
+          </React.Fragment>
         )}
       </Box>
 
@@ -140,7 +175,7 @@ function App() {
     <ThemeProvider theme={responsiveFontSizes(getTheme(mode))}>
       <CssBaseline />
       <BrowserRouter>
-        <Container sx={{ minHeight: '100vh', minWidth: '100vw', p: 1 }}>
+        <Container sx={{ minHeight: '100vh', minWidth: '99vw', p: 1}}>
 
           <AppBar
             position="fixed"
@@ -279,7 +314,11 @@ function App() {
 
               <Route path="/socials" element={<Socials />} />
 
-              <Route path="/login" element={<Login setIsLoggedIn={setIsLoggedIn} />} />
+              <Route path="/blog" element={<Blog />} />
+
+              <Route path="/create" element={<Create />} />
+
+              <Route path="/login" element={<Login setIsLoggedIn={setIsLoggedIn} setUserId={setUserId} />} />
             </Routes>
           </Box>
 

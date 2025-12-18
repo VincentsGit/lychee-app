@@ -76,7 +76,7 @@ export const getTheme = (mode = 'light') => {
   return createTheme({
     palette: mode === 'light' ? lightPalette : darkPalette,
     typography: {
-      fontFamily: '"Delius", cursive',
+      fontFamily: '"Playfair Display", "Playfair", serif',
     },
     shape: {
       borderRadius: 12,

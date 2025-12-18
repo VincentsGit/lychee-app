@@ -9,7 +9,7 @@ import {
 } from "@mui/material";
 import { useNavigate } from 'react-router-dom';
 
-export default function Login({ setIsLoggedIn }) {
+export default function Login({ setIsLoggedIn, setUserId }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -48,6 +48,7 @@ export default function Login({ setIsLoggedIn }) {
 
       navigate("/");
       setIsLoggedIn(true);
+      setUserId(data.user_id);
 
     } catch (err) {
       console.log(err)
