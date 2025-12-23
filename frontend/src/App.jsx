@@ -9,6 +9,8 @@ import Socials from './pages/Socials';
 import Blog from './pages/Blog';
 import Login from './pages/Login';
 import Create from './pages/Create';
+import BlogPost from "./pages/BlogPost";
+import EditPost from "./pages/EditPost";
 import { getTheme } from './components/theme';
 import Paper from '@mui/material/Paper';
 import Drawer from '@mui/material/Drawer';
@@ -315,6 +317,10 @@ function App() {
               <Route path="/socials" element={<Socials />} />
 
               <Route path="/blog" element={<Blog />} />
+
+              <Route path="/blog/:postId/:postTitle" element={<BlogPost />} />
+
+              <Route path="/edit/:postId" element={<EditPost />} />
 
               <Route path="/create" element={<Create />} />
 
