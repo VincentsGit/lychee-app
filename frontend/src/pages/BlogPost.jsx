@@ -11,7 +11,7 @@ export default function BlogPost() {
   useEffect(() => {
     async function fetchPost() {
       try {
-        const res = await fetch(`http://localhost:5000/posts/${postId}`, {
+        const res = await fetch(`/api/posts/${postId}`, {
           credentials: "include",
         });
         if (!res.ok) throw new Error("Failed to fetch post");
@@ -52,7 +52,7 @@ export default function BlogPost() {
       </Typography>
       <Typography variant="subtitle2" sx={{ mb: 4, color: "text.secondary" }}>
         {new Date(post.createdAt).toLocaleString()}
-        {post.updatedAt && ` - Updated at ${new Date(post.updatedAt).toLocaleString()}`}
+        {/* {post.updatedAt && ` - Updated at ${new Date(post.updatedAt).toLocaleString()}`} */}
       </Typography>
       <BlogPostContent content={post.content} />
     </Container>

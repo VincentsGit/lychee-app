@@ -81,9 +81,9 @@ export default function BlogPostContent({ content }) {
                 display: "block",
                 marginLeft: "auto",
                 marginRight: "auto",
-                maxWidth: "75%",
+                maxWidth: "55%",
                 height: "auto",
-                mb: 2,
+                mb: 4,
               }}
             />
           );

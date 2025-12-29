@@ -45,7 +45,7 @@ def upload_image():
     file.save(file_path)
 
     # Return URL to access the image
-    url = f"http://localhost:5000/tmp-uploads/{filename}"
+    url = f"/tmp-uploads/{filename}"
     return {"url": url}
 
 # Serve uploaded images
@@ -130,9 +130,6 @@ def get_post(post_id):
         "createdAt": post["created_at"],
         "updatedAt": post["updated_at"]
     })
-
-import os
-import re
 
 @app.route("/posts/<int:post_id>", methods=["DELETE"])
 def delete_post(post_id):
@@ -326,13 +323,18 @@ def me():
     })
 
 def authorise(session_id):
+    if not session_id:
+        return None
     db = get_db()
     user = db.execute(
-        "SELECT users.id, users.username FROM users JOIN cookies WHERE cookie_value = ?", (session_id,)
+        """
+        SELECT users.id, users.username
+        FROM users
+        JOIN cookies ON users.id = cookies.user_id
+        WHERE cookies.cookie_value = ?
+        """,
+        (session_id,)
     ).fetchone()
-
-    if not user:
-        return None
     return user
 
 if __name__ == "__main__":

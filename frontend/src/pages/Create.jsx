@@ -20,7 +20,7 @@ import EditorToolbar from "../components/EditorToolbar";
 export default function Create() {
   const navigate = useNavigate();
   useEffect(() => {
-    fetch("http://localhost:5000/me", { credentials: "include" })
+    fetch("/api/me", { credentials: "include" })
       .then(res => !res.ok && navigate("/"));
   }, []);
   const theme = useTheme();
@@ -31,7 +31,7 @@ export default function Create() {
     formData.append("file", file);
 
     try {
-      const res = await fetch("http://localhost:5000/upload", {
+      const res = await fetch("/api/upload", {
         method: "POST",
         body: formData,
         credentials: "include",
@@ -111,7 +111,7 @@ const handleSubmit = async (e) => {
   };
 
   try {
-    const res = await fetch("http://localhost:5000/posts", {
+    const res = await fetch("/api/posts", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

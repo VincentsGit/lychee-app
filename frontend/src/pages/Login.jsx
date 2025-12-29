@@ -16,7 +16,7 @@ export default function Login({ setIsLoggedIn, setUserId }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch("http://localhost:5000/me", { credentials: "include" })
+    fetch("/api/me", { credentials: "include" })
       .then(res => res.ok && navigate("/"));
   }, []);
 
@@ -30,7 +30,7 @@ export default function Login({ setIsLoggedIn, setUserId }) {
     }
 
     try {
-      const response = await fetch("http://localhost:5000/login", {
+      const response = await fetch("/api/login", {
         method: "POST",
         credentials: "include", // ✅ important for cookies
         headers: {

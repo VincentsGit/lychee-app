@@ -40,12 +40,31 @@ export default function EditPost() {
   const [isDirty, setIsDirty] = useState(false);
   const [originalImages, setOriginalImages] = useState([]);
 
+  const uploadImage = async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      const data = await res.json();
+
+      if (data.url) {
+        editor.chain().focus().setImage({ src: data.url }).run();
+      }
+    } catch (err) {
+      console.error("Image upload failed", err);
+    }
+  };
+
   const editor = useEditor({
     extensions: [
       StarterKit,
       TextStyle,
-      Underline,
-      Link,
       Image,
       Youtube.configure({ controls: true, nocookie: true }),
     ],
@@ -55,7 +74,7 @@ export default function EditPost() {
 
   // Check auth first
   useEffect(() => {
-    fetch("http://localhost:5000/me", { credentials: "include" })
+    fetch("/api/me", { credentials: "include" })
       .then(res => {
         if (!res.ok) navigate("/");
         return res.json();
@@ -67,7 +86,7 @@ export default function EditPost() {
   useEffect(() => {
     async function fetchPost() {
       try {
-        const res = await fetch(`http://localhost:5000/posts/${postId}`, {
+        const res = await fetch(`/api/posts/${postId}`, {
           credentials: "include",
         });
         if (!res.ok) throw new Error("Failed to fetch post");
@@ -112,7 +131,7 @@ export default function EditPost() {
       const removedImages = originalImages.filter(img => !currentImages.includes(img));
 
       // Send PUT request to update post
-      const res = await fetch(`http://localhost:5000/posts/${postId}`, {
+      const res = await fetch(`/api/posts/${postId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -123,7 +142,7 @@ export default function EditPost() {
       // Delete removed images from server
       for (const imgUrl of removedImages) {
         const filename = imgUrl.split("/uploads/")[1];
-        await fetch(`http://localhost:5000/uploads/${filename}`, {
+        await fetch(`/uploads/${filename}`, {
           method: "DELETE",
           credentials: "include",
         });
@@ -167,17 +186,7 @@ export default function EditPost() {
               />
 
               <Box sx={{ mt: 3, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
-                <EditorToolbar editor={editor} uploadImage={async (file) => {
-                  const formData = new FormData();
-                  formData.append("file", file);
-                  const res = await fetch("http://localhost:5000/upload", {
-                    method: "POST",
-                    body: formData,
-                    credentials: "include",
-                  });
-                  const data = await res.json();
-                  if (data.url) editor.chain().focus().setImage({ src: data.url }).run();
-                }} />
+                <EditorToolbar editor={editor} uploadImage={uploadImage} />
 
                 <Box sx={{
                   p: 2,

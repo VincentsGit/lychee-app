@@ -11,7 +11,7 @@ export default function Blog() {
 
   useEffect(() => {
     // Fetch user info
-    fetch('http://localhost:5000/me', { credentials: 'include' })
+    fetch('/api/me', { credentials: 'include' })
       .then(res => {
         if (!res.ok) throw new Error('Not authorized');
         return res.json();
@@ -20,7 +20,7 @@ export default function Blog() {
       .catch(() => setUser(null));
 
     // Fetch posts
-    fetch('http://localhost:5000/posts', { credentials: 'include' })
+    fetch('/api/posts', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         const sorted = data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
@@ -41,7 +41,7 @@ export default function Blog() {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this post?')) return;
     try {
-      const res = await fetch(`http://localhost:5000/posts/${id}`, {
+      const res = await fetch(`/api/posts/${id}`, {
         method: 'DELETE',
         credentials: 'include',
       });

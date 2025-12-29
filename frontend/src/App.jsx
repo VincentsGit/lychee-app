@@ -29,7 +29,7 @@ function App() {
   const [userId, setUserId] = useState(null);
 
   useEffect(() => {
-    fetch("http://localhost:5000/me", { credentials: "include" })
+    fetch("/api/me", { credentials: "include" })
       .then(res => {
         if (!res.ok) return;
         return res.json();
@@ -98,7 +98,7 @@ function App() {
                 onClick={() => {
                   // Clear login state / cookies
                   setIsLoggedIn(false);
-                  fetch('http://localhost:5000/logout', {
+                  fetch('/api/logout', {
                     method: 'POST',
                     credentials: 'include',
                   });
@@ -155,7 +155,7 @@ function App() {
                 color="inherit"
                 onClick={() => {
                   setIsLoggedIn(false);
-                  fetch('http://localhost:5000/logout', {
+                  fetch('/api/logout', {
                     method: 'POST',
                     credentials: 'include',
                   });
@@ -308,6 +308,9 @@ function App() {
                     <Typography variant="body1" sx={{ mt: 4 }}>
                       I hope you enjoy your stay!
                     </Typography>
+                    <Box sx={{ mt: 4, textAlign: 'center' }}>
+                      <iframe src="https://free.timeanddate.com/clock/ia7vckjt/n31/tles/fn7/fs22/fcf9f/tc000/ftb/bas2/bat1/bacf9f/pa8/tt0/tw1/tm1/td1/th1/ta1/tb4" frameborder="0" width="230" height="80"></iframe>
+                    </Box>
                   </Container>
                 }
               />

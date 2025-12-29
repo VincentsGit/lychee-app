@@ -16,3 +16,13 @@ To run the application, simply run the following commands in the correct working
 
 1. `docker compose build`
 2. `docker compose up`
+
+## Certs
+
+sudo docker run -it --rm \
+  -v /etc/letsencrypt:/etc/letsencrypt \
+  -v /var/lib/letsencrypt:/var/lib/letsencrypt \
+  certbot/certbot certonly \
+  --manual \
+  --preferred-challenges=dns \
+  -d lychee.blog -d www.lychee.blog

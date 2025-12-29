@@ -1,11 +1,13 @@
-FROM node:25-slim AS builder
-
+# Build stage
+FROM node:25-slim AS build
 WORKDIR /app
-
 COPY package*.json ./
 RUN npm install
-
 COPY . .
+RUN npm run build
 
-# Use Vite dev server for hot reload
-CMD ["npm", "run", "dev", "--", "--host"]
+# Production stage
+FROM nginx:alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 8443
+CMD ["nginx", "-g", "daemon off;"]
