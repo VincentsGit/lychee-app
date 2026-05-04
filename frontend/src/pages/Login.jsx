@@ -1,116 +1,49 @@
-import React, { useState, useEffect } from "react";
-import {
-  Box,
-  Button,
-  TextField,
-  Typography,
-  Container,
-  Alert,
-} from "@mui/material";
-import { useNavigate } from 'react-router-dom';
+import { useState } from "react";
+import { Alert, Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
+import AnimatedSection from "../components/AnimatedSection";
+import { api } from "../components/api";
 
-export default function Login({ setIsLoggedIn, setUserId }) {
+export default function Login({ setUser }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  useEffect(() => {
-    fetch("/api/me", { credentials: "include" })
-      .then(res => res.ok && navigate("/"));
-  }, []);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError("");
-
-    if (!username || !password) {
-      setError("Please fill in both fields.");
-      return;
-    }
-
     try {
-      const response = await fetch("/api/login", {
+      const data = await api("/api/login", {
         method: "POST",
-        credentials: "include", // ✅ important for cookies
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ username, password }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setError(data.error || "Login failed.");
-        return;
-      }
-
+      setUser(data.user);
       navigate("/");
-      setIsLoggedIn(true);
-      setUserId(data.user_id);
-
     } catch (err) {
-      console.log(err)
-      setError("Network error. Please try again.");
+      setError(err.message);
     }
   };
 
   return (
-    <Container sx={{ mt: { xs: 0, md: 4 } }}>
-      <Typography variant="h2" color="blog.subheading">Login</Typography>
-
-      <Typography variant="body1" sx={{ mt: 4 }}>
-        Page for me to login.
-      </Typography>
-
-      <Typography variant="body1" sx={{ mt: 2 }}>
-        You won't be able to login, only I can. (For now at least.)
-      </Typography>
-
-      <Box
-        component="form"
-        onSubmit={handleSubmit}
-        sx={{
-          mt: 4,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-        }}
-      >
-        <TextField
-          margin="normal"
-          required
-          fullWidth
-          label="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-        />
-        <TextField
-          margin="normal"
-          required
-          fullWidth
-          label="Password"
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-
-        <Button
-          type="submit"
-          fullWidth
-          variant="contained"
-          sx={{ mt: 3 }}
-        >
-          Login
-        </Button>
-        {error && (
-          <Alert severity="error" sx={{ width: "100%", mt: 2 }}>
-            {error}
-          </Alert>
-        )}
-      </Box>
-
-    </Container>
+    <AnimatedSection>
+      <Paper elevation={0} sx={{ maxWidth: 560, mx: "auto", p: { xs: 3, md: 5 } }}>
+        <Box component="form" onSubmit={handleSubmit}>
+          <Stack spacing={2.5}>
+            <Box>
+              <Typography variant="h1" color="blog.subheading">Login</Typography>
+              <Typography color="text.secondary">Welcome back!</Typography>
+            </Box>
+            {error && <Alert severity="error">{error}</Alert>}
+            <TextField label="Username" value={username} onChange={(event) => setUsername(event.target.value)} required />
+            <TextField label="Password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} required />
+            <Button type="submit" variant="contained" size="large">Login</Button>
+            <Typography color="text.secondary">
+              New here? <Button component={RouterLink} to="/register">Create an account</Button>
+            </Typography>
+          </Stack>
+        </Box>
+      </Paper>
+    </AnimatedSection>
   );
 }

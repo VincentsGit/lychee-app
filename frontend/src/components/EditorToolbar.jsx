@@ -19,8 +19,8 @@ import OndemandVideoIcon from "@mui/icons-material/OndemandVideo";
 import ImageIcon from '@mui/icons-material/Image';
 
 export default function EditorToolbar({ editor, uploadImage }) {
-  if (!editor) return null;
   const fileInputRef = useRef(null);
+  if (!editor) return null;
 
   const headingLevels = [2, 3];
 

@@ -1,9 +1,7 @@
-version: "3.9"
-
 services:
   backend:
     build: ./backend
-    container_name: flask_app
+    container_name: flask_app_v2
     ports:
       - "5000:5000"
     volumes:
@@ -12,10 +10,12 @@ services:
       - ./backend/instance:/app/instance
     environment:
       - FLASK_ENV=production
+      - STEAM_API_KEY=${STEAM_API_KEY:-}
+      - STEAM_ID=${STEAM_ID:-}
 
   frontend:
     build: ./frontend
-    container_name: react_app
+    container_name: react_app_v2
     ports:
       - "8443:8443"   # HTTPS port
     volumes:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
@@ -16,6 +16,7 @@ import {
   CardContent,
   TextField,
   Button,
+  Alert,
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 
@@ -30,6 +31,8 @@ function extractImageUrls(html) {
   return urls;
 }
 
+const AUTOSAVE_INTERVAL_MS = 60 * 1000;
+
 export default function EditPost() {
   const { postId } = useParams();
   const navigate = useNavigate();
@@ -39,6 +42,8 @@ export default function EditPost() {
   const [loading, setLoading] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
   const [originalImages, setOriginalImages] = useState([]);
+  const [postStatus, setPostStatus] = useState("published");
+  const [autosaveStatus, setAutosaveStatus] = useState("Autosaves every minute");
 
   const uploadImage = async (file) => {
     const formData = new FormData();
@@ -65,6 +70,8 @@ export default function EditPost() {
     extensions: [
       StarterKit,
       TextStyle,
+      Underline,
+      Link.configure({ openOnClick: false }),
       Image,
       Youtube.configure({ controls: true, nocookie: true }),
     ],
@@ -79,6 +86,9 @@ export default function EditPost() {
         if (!res.ok) navigate("/");
         return res.json();
       })
+      .then(data => {
+        if (data?.user?.username !== "runitrench") navigate("/");
+      })
       .catch(() => navigate("/"));
   }, [navigate]);
 
@@ -92,12 +102,14 @@ export default function EditPost() {
         if (!res.ok) throw new Error("Failed to fetch post");
         const data = await res.json();
         setTitle(data.title);
+        setPostStatus(data.status || "published");
         editor?.commands.setContent(data.content);
 
         const imgs = extractImageUrls(data.content).filter(src =>
           src.includes("/uploads/")
         );
         setOriginalImages(imgs);
+        setIsDirty(false);
       } catch (err) {
         console.error(err);
       } finally {
@@ -118,28 +130,25 @@ export default function EditPost() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
 
-  const handleSave = async () => {
+  const savePost = useCallback(async (status, removeUnusedImages = false) => {
     if (!editor) return;
     const content = editor.getHTML();
-    const updatedPost = { title, content };
+    const updatedPost = { title, content, status };
 
-    try {
-      // Determine which original images were removed
-      const currentImages = extractImageUrls(content).filter(src =>
-        src.includes("/uploads/")
-      );
-      const removedImages = originalImages.filter(img => !currentImages.includes(img));
+    const currentImages = extractImageUrls(content).filter(src =>
+      src.includes("/uploads/")
+    );
+    const removedImages = originalImages.filter(img => !currentImages.includes(img));
 
-      // Send PUT request to update post
-      const res = await fetch(`/api/posts/${postId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(updatedPost),
-      });
-      if (!res.ok) throw new Error("Failed to update post");
+    const res = await fetch(`/api/posts/${postId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(updatedPost),
+    });
+    if (!res.ok) throw new Error("Failed to update post");
 
-      // Delete removed images from server
+    if (removeUnusedImages) {
       for (const imgUrl of removedImages) {
         const filename = imgUrl.split("/uploads/")[1];
         await fetch(`/uploads/${filename}`, {
@@ -147,8 +156,39 @@ export default function EditPost() {
           credentials: "include",
         });
       }
+      setOriginalImages(currentImages);
+    }
 
-      setIsDirty(false);
+    const savedPost = await res.json();
+    setPostStatus(savedPost.status || status);
+    setIsDirty(false);
+    return savedPost;
+  }, [editor, originalImages, postId, title]);
+
+  useEffect(() => {
+    if (!editor || loading) return undefined;
+
+    const autosave = async () => {
+      if (!isDirty) return;
+      setAutosaveStatus("Autosaving...");
+      try {
+        const status = postStatus === "draft" ? "draft" : "published";
+        await savePost(status);
+        setAutosaveStatus(`Autosaved ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
+      } catch (err) {
+        console.error("Autosave failed:", err);
+        setAutosaveStatus("Autosave could not save");
+      }
+    };
+
+    const intervalId = window.setInterval(autosave, AUTOSAVE_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [editor, isDirty, loading, postStatus, savePost]);
+
+  const handleSave = async () => {
+    try {
+      const savedPost = await savePost("published", true);
+      if (!savedPost) return;
       navigate(`/blog/${postId}/${encodeURIComponent(title.replace(/\s+/g, '-').toLowerCase())}`);
     } catch (err) {
       console.error(err);
@@ -184,6 +224,9 @@ export default function EditPost() {
                 required
                 margin="normal"
               />
+              <Alert severity={postStatus === "draft" ? "warning" : "info"} sx={{ mt: 2 }}>
+                {postStatus === "draft" ? "This post is still a draft. " : ""}{autosaveStatus}
+              </Alert>
 
               <Box sx={{ mt: 3, border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
                 <EditorToolbar editor={editor} uploadImage={uploadImage} />

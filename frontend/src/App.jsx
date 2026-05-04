@@ -1,340 +1,242 @@
-import React, { useState, useEffect } from 'react';
-import LightModeIcon from '@mui/icons-material/LightMode';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import { Container, Typography, Box, Button, CssBaseline, Link as MUILink } from '@mui/material';
-import { ThemeProvider, responsiveFontSizes } from '@mui/material/styles';
-import { BrowserRouter, Routes, Route, Link as RouterLink } from 'react-router-dom';
-import About from './pages/About';
-import Socials from './pages/Socials';
-import Blog from './pages/Blog';
-import Login from './pages/Login';
-import Create from './pages/Create';
+import { useEffect, useMemo, useState } from "react";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import MenuIcon from "@mui/icons-material/Menu";
+import CloseIcon from "@mui/icons-material/Close";
+import SettingsIcon from "@mui/icons-material/Settings";
+import LogoutIcon from "@mui/icons-material/Logout";
+import CreateIcon from "@mui/icons-material/Create";
+import {
+  AppBar,
+  Box,
+  Button,
+  Container,
+  CssBaseline,
+  Drawer,
+  IconButton,
+  Link as MUILink,
+  Stack,
+  Toolbar,
+  Typography,
+} from "@mui/material";
+import { ThemeProvider, responsiveFontSizes } from "@mui/material/styles";
+import { BrowserRouter, Link as RouterLink, Route, Routes, useNavigate } from "react-router-dom";
+import About from "./pages/About";
+import Blog from "./pages/Blog";
 import BlogPost from "./pages/BlogPost";
+import Create from "./pages/Create";
 import EditPost from "./pages/EditPost";
-import { getTheme } from './components/theme';
-import Paper from '@mui/material/Paper';
-import Drawer from '@mui/material/Drawer';
-import IconButton from '@mui/material/IconButton';
-import PandaIcon from './icons/panda.png';
-import AppBar from '@mui/material/AppBar';
-import Divider from '@mui/material/Divider';
-import lavenderGif from './icons/lavender.gif';
-import flowersGif from './icons/flowers.gif';
-import pandaMenuGif from './icons/panda_menu.gif';
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import Settings from "./pages/Settings";
+import Socials from "./pages/Socials";
+import SteamSavings from "./pages/SteamSavings";
+import Travel from "./pages/Travel";
+import User from "./pages/User";
+import { api } from "./components/api";
+import { decodeDisplayText } from "./components/displayText";
+import { getTheme } from "./components/theme";
+import UserAvatar from "./components/UserAvatar";
+import PandaIcon from "./icons/panda.png";
 
-function App() {
-  const [mode, setMode] = useState('dark');
+function AppShell() {
+  const [mode, setMode] = useState("dark");
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userId, setUserId] = useState(null);
+  const [user, setUser] = useState(undefined);
+  const navigate = useNavigate();
+
+  const theme = useMemo(() => responsiveFontSizes(getTheme(mode)), [mode]);
+
+  const refreshUser = () => {
+    api("/api/me")
+      .then((data) => setUser(data.user))
+      .catch(() => setUser(null));
+  };
 
   useEffect(() => {
-    fetch("/api/me", { credentials: "include" })
-      .then(res => {
-        if (!res.ok) return;
-        return res.json();
-      })
-      .then(data => {
-        if (data && data.user && data.user.id) {
-          setIsLoggedIn(true);
-          setUserId(data.user.id);
-        }
-      });
+    refreshUser();
   }, []);
 
-  const toggleMode = () => {
-    setMode(prev => (prev === 'light' ? 'dark' : 'light'));
+  const logout = async () => {
+    await fetch("/api/logout", { method: "POST", credentials: "include" });
+    setUser(null);
+    setMobileOpen(false);
+    navigate("/");
   };
 
-  const handleDrawerToggle = () => {
-    setMobileOpen(prev => !prev);
-  };
+  const navItems = [
+    { label: "Home", to: "/" },
+    { label: "About", to: "/about" },
+    { label: "Blog", to: "/blog" },
+    { label: "Travel", to: "/travel" },
+    { label: "Games", to: "/games" },
+    { label: "Socials", to: "/socials" },
+  ];
 
-  const drawerWidth = 240;
-  const navItems = ['Home', 'About', 'Blog', 'Socials'];
-  if (!isLoggedIn) {
-    navItems.push('Login');
-  }
+  const nav = (
+    <Stack spacing={1.2}>
+      {navItems.map((item) => (
+        <Button
+          key={item.to}
+          component={RouterLink}
+          to={item.to}
+          onClick={() => setMobileOpen(false)}
+          sx={{ justifyContent: "flex-start", px: 2 }}
+        >
+          {item.label}
+        </Button>
+      ))}
+      {user?.username === "runitrench" && (
+        <Button
+          component={RouterLink}
+          to="/create"
+          startIcon={<CreateIcon />}
+          onClick={() => setMobileOpen(false)}
+          sx={{ justifyContent: "flex-start", px: 2 }}
+        >
+          Create
+        </Button>
+      )}
+    </Stack>
+  );
+
+  const account = user ? (
+    <Stack spacing={1.2}>
+      <Button
+        component={RouterLink}
+        to={`/users/${user.id}`}
+        onClick={() => setMobileOpen(false)}
+        startIcon={<UserAvatar user={user} size={28} />}
+        sx={{ justifyContent: "flex-start", px: 2 }}
+      >
+        {decodeDisplayText(user.displayName || user.username)}
+      </Button>
+      <Button
+        component={RouterLink}
+        to="/settings"
+        startIcon={<SettingsIcon />}
+        onClick={() => setMobileOpen(false)}
+        sx={{ justifyContent: "flex-start", px: 2 }}
+      >
+        Settings
+      </Button>
+      <Button startIcon={<LogoutIcon />} onClick={logout} sx={{ justifyContent: "flex-start", px: 2 }}>
+        Logout
+      </Button>
+    </Stack>
+  ) : (
+    <Stack spacing={1.2}>
+      <Button component={RouterLink} to="/login" onClick={() => setMobileOpen(false)} sx={{ justifyContent: "flex-start", px: 2 }}>
+        Login
+      </Button>
+      <Button component={RouterLink} to="/register" variant="contained" onClick={() => setMobileOpen(false)} sx={{ justifyContent: "flex-start", px: 2 }}>
+        Register
+      </Button>
+    </Stack>
+  );
 
   const drawer = (
-    <div>
-      <Box sx={{ display: "flex", justifyContent: "center" }}>
-        <img
-          src={pandaMenuGif}
-          alt="logo"
-          style={{ width: "50%", borderRadius: 8 }}
-        />
-      </Box>
-      <Divider />
-      <Box sx={{ textAlign: 'center', mt: 2 }}>
-        {navItems.map(item => {
-          const to = item === 'Home' ? '/' : `/${item.toLowerCase()}`;
-
-          if (item === 'Login' && !isLoggedIn) {
-            return (
-              <React.Fragment key={item}>
-                <Divider sx={{ mt: 2 }} />
-                <Typography sx={{ mt: 2 }}>
-                  <MUILink
-                    component={RouterLink}
-                    to={to}
-                    underline="none"
-                    color="inherit"
-                    sx={{ display: 'block', p: 2, mt: 2 }}
-                    onClick={() => { if (mobileOpen) handleDrawerToggle(); }}
-                  >
-                    {item}
-                  </MUILink>
-                </Typography>
-              </React.Fragment>
-            );
-          }
-
-          // Render Logout button
-          if (item === 'Logout' || isLoggedIn && to === '/login') {
-            return (
-              <Button
-                key="logout"
-                onClick={() => {
-                  // Clear login state / cookies
-                  setIsLoggedIn(false);
-                  fetch('/api/logout', {
-                    method: 'POST',
-                    credentials: 'include',
-                  });
-                  if (mobileOpen) handleDrawerToggle();
-                }}
-                sx={{ display: 'block', width: '100%', p: 2, textTransform: 'none' }}
-              >
-                Logout
-              </Button>
-            );
-          }
-
-          return (
-            <Typography key={item}>
-              <MUILink
-                component={RouterLink}
-                to={to}
-                underline="none"
-                color="inherit"
-                sx={{ display: 'block', p: 2 }}
-                onClick={() => { if (mobileOpen) handleDrawerToggle(); }}
-              >
-                {item}
-              </MUILink>
-            </Typography>
-          );
-        })}
-
-        {/* If logged in, add Logout manually */}
-        {isLoggedIn && (
-          <React.Fragment>
-            <Divider sx={{ my: 2 }} />
-            {userId === 1 && (
-              <>
-                <Typography>
-                  <MUILink
-                    component={RouterLink}
-                    to={"/create"}
-                    underline="none"
-                    color="inherit"
-                    onClick={() => { if (mobileOpen) handleDrawerToggle(); }}
-                    sx={{ display: 'block', p: 2, cursor: 'pointer' }}
-                  >
-                    Create Post
-                  </MUILink>
-                </Typography>
-              </>
-            )}
-            <Typography>
-              <MUILink
-                component={RouterLink}
-                to={"/"}
-                underline="none"
-                color="inherit"
-                onClick={() => {
-                  setIsLoggedIn(false);
-                  fetch('/api/logout', {
-                    method: 'POST',
-                    credentials: 'include',
-                  });
-                  if (mobileOpen) handleDrawerToggle();
-                }}
-                sx={{ display: 'block', p: 2, cursor: 'pointer' }}
-              >
-                Logout
-              </MUILink>
-            </Typography>
-          </React.Fragment>
-        )}
-      </Box>
-
-    </div>
+    <Box sx={{ p: 2.5, height: "100%", display: "flex", flexDirection: "column", gap: 3 }}>
+      <Stack direction="row" spacing={1.5} alignItems="center">
+        <Box component="img" src={PandaIcon} alt="lychee" sx={{ width: 42, height: 42 }} />
+        <Box>
+          <Typography variant="h5" lineHeight={1}>lychee</Typography>
+          <Typography variant="caption" color="text.secondary">my little site</Typography>
+        </Box>
+      </Stack>
+      {nav}
+      <Box sx={{ flex: 1 }} />
+      {account}
+    </Box>
   );
 
   return (
-    <ThemeProvider theme={responsiveFontSizes(getTheme(mode))}>
+    <ThemeProvider theme={theme}>
       <CssBaseline />
-      <BrowserRouter>
-        <Container sx={{ minHeight: '100vh', minWidth: '99vw', p: 1}}>
+      <Box sx={{ minHeight: "100vh" }}>
+        <AppBar position="sticky" color="transparent" elevation={0} sx={{ backdropFilter: "blur(18px)" }}>
+          <Toolbar sx={{ gap: 2, px: { xs: 2, md: 4 } }}>
+            <IconButton onClick={() => setMobileOpen(true)} sx={{ display: { md: "none" } }}>
+              <MenuIcon />
+            </IconButton>
+            <MUILink component={RouterLink} to="/" underline="none" color="inherit" sx={{ display: "flex", alignItems: "center", gap: 1.2 }}>
+              <Box component="img" src={PandaIcon} alt="" sx={{ width: 34, height: 34 }} />
+              <Typography variant="h4" sx={{ letterSpacing: 0 }}>lychee</Typography>
+            </MUILink>
+            <Stack direction="row" spacing={0.5} sx={{ ml: 3, display: { xs: "none", md: "flex" } }}>
+              {navItems.map((item) => (
+                <Button key={item.to} component={RouterLink} to={item.to}>{item.label}</Button>
+              ))}
+            </Stack>
+            <Box sx={{ flex: 1 }} />
+            {user?.username === "runitrench" && (
+              <Button component={RouterLink} to="/create" startIcon={<CreateIcon />} sx={{ display: { xs: "none", md: "inline-flex" } }}>
+                Create
+              </Button>
+            )}
+            <IconButton onClick={() => setMode((prev) => (prev === "light" ? "dark" : "light"))}>
+              {mode === "light" ? <DarkModeIcon /> : <LightModeIcon />}
+            </IconButton>
+            <Box sx={{ display: { xs: "none", md: "block" } }}>
+              {user ? (
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Button component={RouterLink} to={`/users/${user.id}`} startIcon={<UserAvatar user={user} size={30} />}>
+                    {decodeDisplayText(user.displayName || user.username)}
+                  </Button>
+                  <Button component={RouterLink} to="/settings" startIcon={<SettingsIcon />}>
+                    Settings
+                  </Button>
+                  <Button onClick={logout} startIcon={<LogoutIcon />}>
+                    Logout
+                  </Button>
+                </Stack>
+              ) : (
+                <Stack direction="row" spacing={1}>
+                  <Button component={RouterLink} to="/login">Login</Button>
+                  <Button component={RouterLink} to="/register" variant="contained">Register</Button>
+                </Stack>
+              )}
+            </Box>
+          </Toolbar>
+        </AppBar>
 
-          <AppBar
-            position="fixed"
-            sx={{
-              width: { md: `calc(100% - ${drawerWidth}px)` },
-              ml: { md: `${drawerWidth}px` },
-            }}>
-            <Paper
-              elevation={0}
-              square
-              sx={{
-                width: "100%",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                p: 2,
-                zIndex: 1000,
-              }}
-            >
-              <Box>
-                <IconButton
-                  color="inherit"
-                  aria-label="open drawer"
-                  edge="start"
-                  onClick={handleDrawerToggle}
-                  sx={{ ml: 0, display: { md: 'none' } }}
-                >
-                  <img
-                    src={PandaIcon}
-                    alt="menu"
-                    style={{
-                      width: 30,
-                      height: 30,
-                    }}
-                  />
-                </IconButton>
-              </Box>
-
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 2,
-                  mt: 1
-                }}
-              >
-                <Box
-                  component="img"
-                  src={lavenderGif}
-                  alt="Lavender"
-                  sx={{ width: { xs: "30px", md: "50px" }, mr: { md: 2 } }}
-                />
-
-                <Typography
-                  variant="h1"
-                  sx={{
-                    fontSize: { xs: "2rem", md: "3rem" },
-                    textAlign: "center",
-                  }}
-                >
-                  lychee
-                </Typography>
-
-                <Box
-                  component="img"
-                  src={flowersGif}
-                  alt="Flowers"
-                  sx={{ width: { xs: "40px", md: "70px" }, ml: { md: 2 } }}
-                />
-              </Box>
-
-              <IconButton
-                onClick={toggleMode}
-                sx={{
-                  mr: { xs: 0, md: 6 },
-                  scale: { xs: 1, md: 1.2 }
-                }}
-              >
-                {mode === "light" ? <DarkModeIcon /> : <LightModeIcon />}
-              </IconButton>
-            </Paper>
-          </AppBar>
-
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={handleDrawerToggle}
-            ModalProps={{ keepMounted: true }}
-            sx={{
-              '& .MuiDrawer-paper': {
-                boxSizing: 'border-box',
-                width: drawerWidth,
-              },
-            }}
-          >
+        <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} ModalProps={{ keepMounted: true }}>
+          <Box sx={{ width: 290, height: "100%" }}>
+            <Box sx={{ display: "flex", justifyContent: "flex-end", p: 1 }}>
+              <IconButton onClick={() => setMobileOpen(false)}><CloseIcon /></IconButton>
+            </Box>
             {drawer}
-          </Drawer>
-
-          <Drawer
-            variant="permanent"
-            sx={{
-              display: { xs: 'none', md: 'block' },
-              '& .MuiDrawer-paper': {
-                boxSizing: 'border-box',
-                width: drawerWidth,
-                height: '100vh',
-              },
-            }}
-            open
-          >
-            {drawer}
-          </Drawer>
-
-          <Box sx={{ mt: 12, ml: { xs: 0, md: `${drawerWidth}px` }, p: 2 }}>
-            <Routes>
-              <Route
-                path="/"
-                element={
-                  <Container sx={{ mt: { xs: 0, md: 4 } }}>
-                    <Typography variant="h2" color="blog.subheading">Welcome to my website!</Typography>
-                    <Typography variant="body1" sx={{ mt: 4 }}>
-                      This is a website that was built by my lovely boyfriend that I'm using to write my thoughts down.
-                    </Typography>
-                    <Typography variant="body1" sx={{ mt: 1 }}>
-                      If you like the website, please hire my boyfriend as a software engineer! He is very talented and hardworking.
-                    </Typography>
-                    <Typography variant="body1" sx={{ mt: 4 }}>
-                      I hope you enjoy your stay!
-                    </Typography>
-                    <Box sx={{ mt: 4, textAlign: 'center' }}>
-                      <iframe src="https://free.timeanddate.com/clock/ia7vckjt/n31/tles/fn7/fs22/fcf9f/tc000/ftb/bas2/bat1/bacf9f/pa8/tt0/tw1/tm1/td1/th1/ta1/tb4" frameborder="0" width="230" height="80"></iframe>
-                    </Box>
-                  </Container>
-                }
-              />
-
-              <Route path="/about" element={<About />} />
-
-              <Route path="/socials" element={<Socials />} />
-
-              <Route path="/blog" element={<Blog />} />
-
-              <Route path="/blog/:postId/:postTitle" element={<BlogPost />} />
-
-              <Route path="/edit/:postId" element={<EditPost />} />
-
-              <Route path="/create" element={<Create />} />
-
-              <Route path="/login" element={<Login setIsLoggedIn={setIsLoggedIn} setUserId={setUserId} />} />
-            </Routes>
           </Box>
+        </Drawer>
 
+        <Container maxWidth="lg" sx={{ py: { xs: 3, md: 6 } }}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/about" element={<About user={user} />} />
+            <Route path="/socials" element={<Socials />} />
+            <Route path="/blog" element={<Blog user={user} />} />
+            <Route path="/travel" element={<Travel user={user} />} />
+            <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
+            <Route path="/edit/:postId" element={<EditPost />} />
+            <Route path="/create" element={<Create />} />
+            <Route path="/login" element={<Login setUser={setUser} />} />
+            <Route path="/register" element={<Register setUser={setUser} />} />
+            <Route path="/settings" element={<Settings user={user} refreshUser={refreshUser} />} />
+            <Route path="/games" element={<SteamSavings />} />
+            <Route path="/steam-savings" element={<SteamSavings />} />
+            <Route path="/users/:userId" element={<User />} />
+          </Routes>
         </Container>
-      </BrowserRouter>
+      </Box>
     </ThemeProvider>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
+  );
+}

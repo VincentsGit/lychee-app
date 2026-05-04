@@ -1,13 +1,16 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from 'react-router-dom';
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { TextStyle } from '@tiptap/extension-text-style';
+import { Underline } from '@tiptap/extension-underline';
+import { Link } from '@tiptap/extension-link';
 import {
   Box,
   Button,
   Card,
   CardContent,
+  Alert,
   TextField,
   Typography,
   Container,
@@ -17,14 +20,29 @@ import Image from '@tiptap/extension-image';
 import Youtube from "@tiptap/extension-youtube";
 import EditorToolbar from "../components/EditorToolbar";
 
+const AUTOSAVE_INTERVAL_MS = 60 * 1000;
+
 export default function Create() {
   const navigate = useNavigate();
   useEffect(() => {
     fetch("/api/me", { credentials: "include" })
-      .then(res => !res.ok && navigate("/"));
-  }, []);
+      .then(res => {
+        if (!res.ok) {
+          navigate("/");
+          return null;
+        }
+        return res.json();
+      })
+      .then(data => {
+        if (data && data.user?.username !== "runitrench") navigate("/");
+      })
+      .catch(() => navigate("/"));
+  }, [navigate]);
   const theme = useTheme();
   const [title, setTitle] = useState("");
+  const [draftId, setDraftId] = useState(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [autosaveStatus, setAutosaveStatus] = useState("Autosaves every minute");
 
   const uploadImage = async (file) => {
     const formData = new FormData();
@@ -50,6 +68,8 @@ export default function Create() {
   const editor = useEditor({
     extensions: [StarterKit,
       TextStyle,
+      Underline,
+      Link.configure({ openOnClick: false }),
       Image,
       Youtube.configure({
         controls: true,
@@ -57,62 +77,59 @@ export default function Create() {
       }),],
 
     editorProps: {
-      editorProps: {
-        handlePaste(view, event) {
-          const items = event.clipboardData?.items;
-          if (!items) return false;
+      handlePaste(view, event) {
+        const items = event.clipboardData?.items;
+        if (!items) return false;
 
-          for (const item of items) {
-            if (item.type.startsWith("image/")) {
-              event.preventDefault();
+        for (const item of items) {
+          if (item.type.startsWith("image/")) {
+            event.preventDefault();
 
-              const file = item.getAsFile();
-              if (file) uploadImage(file);
+            const file = item.getAsFile();
+            if (file) uploadImage(file);
 
-              return true;
-            }
+            return true;
           }
+        }
 
-          return false;
-        },
-
-
-
-        handleDrop(view, event) {
-          const files = event.dataTransfer?.files;
-          if (!files?.length) return false;
-
-          for (const file of files) {
-            if (file.type.startsWith("image/")) {
-              event.preventDefault();
-              uploadImage(file);
-              return true;
-            }
-          }
-
-          return false;
-        },
+        return false;
       },
 
 
 
+      handleDrop(view, event) {
+        const files = event.dataTransfer?.files;
+        if (!files?.length) return false;
+
+        for (const file of files) {
+          if (file.type.startsWith("image/")) {
+            event.preventDefault();
+            uploadImage(file);
+            return true;
+          }
+        }
+
+        return false;
+      },
+
+
     },
     content: "",
+    onUpdate: () => setIsDirty(true),
   });
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  const savePost = useCallback(async (status) => {
+    if (!editor) return null;
+    const content = editor.getHTML();
+    const hasDraftContent = title.trim() || editor.getText().trim() || content.includes("<img") || content.includes("iframe");
+    if (status === "draft" && !hasDraftContent) return null;
 
-  if (!editor) return;
+    const blogPost = { title, content, status };
+    const url = draftId ? `/api/posts/${draftId}` : "/api/posts";
+    const method = draftId ? "PUT" : "POST";
 
-  const blogPost = {
-    title,
-    content: editor.getHTML(),
-  };
-
-  try {
-    const res = await fetch("/api/posts", {
-      method: "POST",
+    const res = await fetch(url, {
+      method,
       headers: {
         "Content-Type": "application/json",
       },
@@ -121,15 +138,49 @@ const handleSubmit = async (e) => {
     });
 
     if (!res.ok) {
-      throw new Error("Failed to create post");
+      throw new Error(status === "draft" ? "Failed to autosave draft" : "Failed to create post");
     }
 
-    const savedPost = await res.json();
-    navigate("/blog/" + savedPost.id + "/" + encodeURIComponent(savedPost.title.replace(/\s+/g, '-').toLowerCase()));
-  } catch (err) {
-    console.error("Error submitting post:", err);
-  }
-};
+    return res.json();
+  }, [draftId, editor, title]);
+
+  useEffect(() => {
+    if (!editor) return undefined;
+
+    const autosave = async () => {
+      if (!isDirty) return;
+      setAutosaveStatus("Autosaving...");
+      try {
+        const savedPost = await savePost("draft");
+        if (!savedPost) {
+          setAutosaveStatus("Autosaves every minute");
+          return;
+        }
+        setDraftId(savedPost.id);
+        setIsDirty(false);
+        setAutosaveStatus(`Draft saved ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
+      } catch (err) {
+        console.error("Autosave failed:", err);
+        setAutosaveStatus("Autosave could not save");
+      }
+    };
+
+    const intervalId = window.setInterval(autosave, AUTOSAVE_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [editor, isDirty, savePost]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+      const savedPost = await savePost("published");
+      if (!savedPost) return;
+      setIsDirty(false);
+      navigate("/blog/" + savedPost.id + "/" + encodeURIComponent(savedPost.title.replace(/\s+/g, '-').toLowerCase()));
+    } catch (err) {
+      console.error("Error submitting post:", err);
+    }
+  };
 
   return (
     <Container sx={{ mt: { xs: 0, md: 4, overflowX: 'hidden' } }}>
@@ -144,11 +195,14 @@ const handleSubmit = async (e) => {
               <TextField
                 label="Title"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => { setTitle(e.target.value); setIsDirty(true); }}
                 fullWidth
                 required
                 margin="normal"
               />
+              <Alert severity="info" sx={{ mt: 2 }}>
+                {autosaveStatus}
+              </Alert>
 
               <Box
                 sx={{
