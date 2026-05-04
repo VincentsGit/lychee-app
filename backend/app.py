@@ -76,18 +76,28 @@ def split_travel_content(html):
     items = []
     notes = []
     fallback_links = extract_links(html)
+    current_section = ""
     for index, block in enumerate(blocks):
         text = strip_tags(block).strip()
         if not text:
             continue
         link_match = re.search(r'href="([^"]+)"', block)
         url = link_match.group(1) if link_match else ""
+        is_section_heading = (
+            bool(re.match(r"^\d+[\).]\s+", text))
+            or text.upper().startswith("DAY ")
+            or ("<strong" in block.lower() and not url and not text.lstrip().startswith("-") and len(text) <= 140)
+        )
+        if is_section_heading:
+            current_section = text
+            continue
         title = re.sub(r"^[-\s]+", "", text).strip()
         looks_like_item = text.startswith("-") or url or len(title) <= 120
         if looks_like_item:
             items.append({
                 "dayLabel": "",
                 "timeLabel": "",
+                "sectionTitle": current_section,
                 "title": title[:180],
                 "description": "" if url else title[180:],
                 "url": url,
@@ -99,6 +109,7 @@ def split_travel_content(html):
         items.append({
             "dayLabel": "",
             "timeLabel": "",
+            "sectionTitle": "",
             "title": "Original notes",
             "description": strip_tags(html),
             "url": fallback_links[0] if fallback_links else "",
@@ -172,10 +183,6 @@ def migrate_travel_posts(db):
                     item["sortOrder"],
                 ),
             )
-    db.execute(
-        f"UPDATE posts SET category = 'travel' WHERE id IN ({placeholders})",
-        TRAVEL_POST_IDS,
-    )
 
 
 def init_db():
@@ -284,6 +291,7 @@ def init_db():
             plan_id INTEGER NOT NULL,
             day_label TEXT DEFAULT '',
             time_label TEXT DEFAULT '',
+            section_title TEXT DEFAULT '',
             title TEXT NOT NULL,
             description TEXT DEFAULT '',
             url TEXT DEFAULT '',
@@ -297,6 +305,8 @@ def init_db():
     )
     if not column_exists(db, "travel_items", "is_done"):
         db.execute("ALTER TABLE travel_items ADD COLUMN is_done INTEGER DEFAULT 0")
+    if not column_exists(db, "travel_items", "section_title"):
+        db.execute("ALTER TABLE travel_items ADD COLUMN section_title TEXT DEFAULT ''")
     if not column_exists(db, "travel_items", "created_at"):
         db.execute("ALTER TABLE travel_items ADD COLUMN created_at DATETIME")
     if not column_exists(db, "travel_items", "completed_at"):
@@ -658,7 +668,7 @@ def travel_plan_payload(plan):
     db = get_db()
     items = db.execute(
         """
-        SELECT id, day_label, time_label, title, description, url, is_done, created_at, completed_at, sort_order
+        SELECT id, day_label, time_label, section_title, title, description, url, is_done, created_at, completed_at, sort_order
         FROM travel_items
         WHERE plan_id = ?
         ORDER BY sort_order ASC, id ASC
@@ -680,6 +690,7 @@ def travel_plan_payload(plan):
                 "id": item["id"],
                 "dayLabel": item["day_label"] or "",
                 "timeLabel": item["time_label"] or "",
+                "sectionTitle": item["section_title"] or "",
                 "title": item["title"],
                 "description": item["description"] or "",
                 "url": item["url"] or "",
@@ -712,6 +723,7 @@ def normalise_travel_payload(data):
         items.append({
             "dayLabel": (item.get("dayLabel") or "").strip()[:80],
             "timeLabel": (item.get("timeLabel") or "").strip()[:40],
+            "sectionTitle": (item.get("sectionTitle") or "").strip()[:120],
             "title": item_title[:180],
             "description": (item.get("description") or "").strip()[:1200],
             "url": (item.get("url") or "").strip()[:800],
@@ -910,7 +922,7 @@ def get_posts():
         LEFT JOIN comments ON comments.post_id = posts.id
         WHERE posts.category = 'blog'
         GROUP BY posts.id
-        ORDER BY COALESCE(posts.updated_at, posts.created_at) DESC
+        ORDER BY posts.created_at DESC
         """
     ).fetchall()
     return jsonify([
@@ -1288,10 +1300,10 @@ def create_travel_plan():
     for item in items:
         db.execute(
             """
-                INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, is_done, created_at, completed_at, sort_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO travel_items (plan_id, day_label, time_label, section_title, title, description, url, is_done, created_at, completed_at, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["isDone"], item["createdAt"], item["completedAt"], item["sortOrder"]),
+            (plan_id, item["dayLabel"], item["timeLabel"], item["sectionTitle"], item["title"], item["description"], item["url"], item["isDone"], item["createdAt"], item["completedAt"], item["sortOrder"]),
         )
     db.commit()
     plan = db.execute("SELECT * FROM travel_plans WHERE id = ?", (plan_id,)).fetchone()
@@ -1321,10 +1333,10 @@ def update_travel_plan(plan_id):
     for item in items:
         db.execute(
             """
-            INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, is_done, created_at, completed_at, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO travel_items (plan_id, day_label, time_label, section_title, title, description, url, is_done, created_at, completed_at, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["isDone"], item["createdAt"], item["completedAt"], item["sortOrder"]),
+            (plan_id, item["dayLabel"], item["timeLabel"], item["sectionTitle"], item["title"], item["description"], item["url"], item["isDone"], item["createdAt"], item["completedAt"], item["sortOrder"]),
         )
     db.commit()
     plan = db.execute("SELECT * FROM travel_plans WHERE id = ?", (plan_id,)).fetchone()

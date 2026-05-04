@@ -39,6 +39,7 @@ const emptyPlan = {
 const emptyItem = {
   dayLabel: "",
   timeLabel: "",
+  sectionTitle: "",
   title: "",
   description: "",
   url: "",
@@ -92,6 +93,19 @@ function sortChecklistItems(items = []) {
     .map(({ item }) => item);
 }
 
+function groupChecklistItems(items = []) {
+  return sortChecklistItems(items).reduce((groups, item) => {
+    const title = item.sectionTitle || "";
+    const last = groups[groups.length - 1];
+    if (last && last.title === title) {
+      last.items.push(item);
+    } else {
+      groups.push({ title, items: [item] });
+    }
+    return groups;
+  }, []);
+}
+
 export default function Travel({ user }) {
   const { planId } = useParams();
   const navigate = useNavigate();
@@ -102,7 +116,7 @@ export default function Travel({ user }) {
   const [loading, setLoading] = useState(true);
   const canEdit = user?.username === "runitrench";
   const selectedPlan = planId ? plans.find((plan) => String(plan.id) === String(planId)) : null;
-  const selectedChecklistItems = useMemo(() => sortChecklistItems(selectedPlan?.items), [selectedPlan]);
+  const selectedChecklistGroups = useMemo(() => groupChecklistItems(selectedPlan?.items), [selectedPlan]);
 
   const loadPlans = async () => {
     setError("");
@@ -143,8 +157,8 @@ export default function Travel({ user }) {
     }));
   };
 
-  const addItem = () => {
-    setDraft((current) => ({ ...current, items: [...current.items, { ...emptyItem, createdAt: new Date().toISOString() }] }));
+  const addItem = (sectionTitle = "") => {
+    setDraft((current) => ({ ...current, items: [...current.items, { ...emptyItem, sectionTitle, createdAt: new Date().toISOString() }] }));
   };
 
   const removeItem = (index) => {
@@ -270,11 +284,20 @@ export default function Travel({ user }) {
               <Stack spacing={1.5}>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }} justifyContent="space-between">
                   <Typography variant="h3">Checklist</Typography>
-                  <Button startIcon={<AddIcon />} onClick={addItem}>Add item</Button>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <Button startIcon={<AddIcon />} onClick={() => addItem()}>Add item</Button>
+                    <Button startIcon={<AddIcon />} onClick={() => addItem("New section")}>Add section</Button>
+                  </Stack>
                 </Stack>
                 {draft.items.map((item, index) => (
                   <Paper key={index} variant="outlined" sx={{ p: 2, boxShadow: "none", borderRadius: 2 }}>
                     <Stack spacing={1.5}>
+                      <TextField
+                        label="Section"
+                        value={item.sectionTitle}
+                        onChange={(event) => updateItem(index, "sectionTitle", event.target.value)}
+                        placeholder="Optional, for example Day 1 or Packing"
+                      />
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
                         <TextField label="Item" value={item.title} onChange={(event) => updateItem(index, "title", event.target.value)} fullWidth />
                         <IconButton onClick={() => removeItem(index)} aria-label="Remove itinerary item"><DeleteIcon /></IconButton>
@@ -333,65 +356,76 @@ export default function Travel({ user }) {
                   </Typography>
                 )}
 
-                <Stack spacing={0} sx={{ minWidth: 0 }}>
-                  {selectedChecklistItems.map((item, index) => (
-                    <Box
-                      key={item.id}
-                      sx={{
-                        viewTransitionName: `travel-item-${item.id}`,
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 1.25,
-                        py: { xs: 1.25, sm: 1.5 },
-                        px: 0,
-                        borderBottom: index === selectedChecklistItems.length - 1 ? "none" : "1px solid",
-                        borderColor: "divider",
-                        minWidth: 0,
-                      }}
-                    >
-                      <Checkbox
-                        checked={Boolean(item.isDone)}
-                        disabled={!canEdit}
-                        onChange={() => toggleItemDone(item.id)}
-                        inputProps={{ "aria-label": `Mark ${decodeDisplayText(item.title)} as done` }}
-                        sx={{ mt: -0.75, flexShrink: 0 }}
-                      />
-                      <Box sx={{ minWidth: 0, flex: 1, pt: 0.2 }}>
-                        <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0 }}>
-                          <Typography
-                            fontWeight={800}
+                <Stack spacing={3} sx={{ minWidth: 0 }}>
+                  {selectedChecklistGroups.map((group, groupIndex) => (
+                    <Box key={`${group.title}-${groupIndex}`} sx={{ minWidth: 0 }}>
+                      {group.title && (
+                        <Typography variant="h3" color="blog.subheading" sx={{ mb: 1 }}>
+                          {decodeDisplayText(group.title)}
+                        </Typography>
+                      )}
+                      <Stack spacing={0} sx={{ minWidth: 0 }}>
+                        {group.items.map((item, index) => (
+                          <Box
+                            key={item.id}
                             sx={{
-                              flex: 1,
-                              textDecoration: item.isDone ? "line-through" : "none",
-                              color: item.isDone ? "text.secondary" : "text.primary",
-                              ...textWrapSx,
+                              viewTransitionName: `travel-item-${item.id}`,
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: 1.25,
+                              py: { xs: 1.25, sm: 1.5 },
+                              px: 0,
+                              borderBottom: index === group.items.length - 1 ? "none" : "1px solid",
+                              borderColor: "divider",
+                              minWidth: 0,
                             }}
                           >
-                            {decodeDisplayText(item.title)}
-                          </Typography>
-                          {item.url && (
-                            <Link href={item.url} target="_blank" rel="noopener noreferrer" aria-label="Open link" sx={{ flexShrink: 0 }}>
-                              <LinkIcon fontSize="small" />
-                            </Link>
-                          )}
-                        </Stack>
-                        {item.description && (
-                          <Typography color="text.secondary" sx={textWrapSx}>
-                            {decodeDisplayText(item.description)}
-                          </Typography>
-                        )}
-                        {item.url && (
-                          <Link
-                            href={item.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            underline="hover"
-                            sx={{ display: "block", mt: 0.75, fontSize: "0.875rem", ...textWrapSx }}
-                          >
-                            {decodeDisplayText(item.url)}
-                          </Link>
-                        )}
-                      </Box>
+                            <Checkbox
+                              checked={Boolean(item.isDone)}
+                              disabled={!canEdit}
+                              onChange={() => toggleItemDone(item.id)}
+                              inputProps={{ "aria-label": `Mark ${decodeDisplayText(item.title)} as done` }}
+                              sx={{ mt: -0.75, flexShrink: 0 }}
+                            />
+                            <Box sx={{ minWidth: 0, flex: 1, pt: 0.2 }}>
+                              <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0 }}>
+                                <Typography
+                                  fontWeight={800}
+                                  sx={{
+                                    flex: 1,
+                                    textDecoration: item.isDone ? "line-through" : "none",
+                                    color: item.isDone ? "text.secondary" : "text.primary",
+                                    ...textWrapSx,
+                                  }}
+                                >
+                                  {decodeDisplayText(item.title)}
+                                </Typography>
+                                {item.url && (
+                                  <Link href={item.url} target="_blank" rel="noopener noreferrer" aria-label="Open link" sx={{ flexShrink: 0 }}>
+                                    <LinkIcon fontSize="small" />
+                                  </Link>
+                                )}
+                              </Stack>
+                              {item.description && (
+                                <Typography color="text.secondary" sx={textWrapSx}>
+                                  {decodeDisplayText(item.description)}
+                                </Typography>
+                              )}
+                              {item.url && (
+                                <Link
+                                  href={item.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  underline="hover"
+                                  sx={{ display: "block", mt: 0.75, fontSize: "0.875rem", ...textWrapSx }}
+                                >
+                                  {decodeDisplayText(item.url)}
+                                </Link>
+                              )}
+                            </Box>
+                          </Box>
+                        ))}
+                      </Stack>
                     </Box>
                   ))}
                   {!selectedPlan.items.length && <Typography color="text.secondary">No checklist items yet.</Typography>}

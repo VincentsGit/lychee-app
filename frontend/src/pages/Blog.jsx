@@ -21,7 +21,7 @@ export default function Blog({ user }) {
 
   useEffect(() => {
     api("/api/posts")
-      .then((data) => setPosts(data.sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))))
+      .then((data) => setPosts(data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))))
       .catch((err) => console.error("Failed to fetch posts:", err));
   }, []);
 
@@ -98,7 +98,7 @@ export default function Blog({ user }) {
                         <Stack alignItems="flex-start">
                           <Typography fontWeight={800}>{decodeDisplayText(post.title)}</Typography>
                           <Typography variant="caption" color="text.secondary">
-                            {new Date(post.updatedAt || post.createdAt).toLocaleDateString()}
+                            {new Date(post.createdAt).toLocaleDateString()}
                           </Typography>
                         </Stack>
                       </Button>
