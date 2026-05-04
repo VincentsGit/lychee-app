@@ -21,7 +21,7 @@ export default function BlogPostContent({ content }) {
           return (
             <Typography
               variant="body1"
-              sx={{ mb: inList ? 0 : isEmpty ? 1 : 2 }}
+              sx={{ mb: inList ? 0 : isEmpty ? 1 : 2, overflowWrap: "anywhere", wordBreak: "break-word" }}
             >
               {isEmpty ? "\u00A0" : children}
             </Typography>
@@ -30,14 +30,14 @@ export default function BlogPostContent({ content }) {
 
         case "h2":
           return (
-            <Typography variant="h2" color="blog.subheading" sx={{ mb: 4 }}>
+            <Typography variant="h2" color="blog.subheading" sx={{ mb: 4, overflowWrap: "anywhere", wordBreak: "break-word" }}>
               {children}
             </Typography>
           );
 
         case "h3":
           return (
-            <Typography variant="h3" color="blog.subheading" sx={{ mb: 3 }}>
+            <Typography variant="h3" color="blog.subheading" sx={{ mb: 3, overflowWrap: "anywhere", wordBreak: "break-word" }}>
               {children}
             </Typography>
           );
@@ -63,6 +63,8 @@ export default function BlogPostContent({ content }) {
                 color: theme.palette.blog.link,
                 "&:hover": { color: theme.palette.blog.linkHover },
                 cursor: "pointer",
+                overflowWrap: "anywhere",
+                wordBreak: "break-word",
               }}
               target={domNode.attribs.target || "_blank"}
               rel={domNode.attribs.rel || "noopener noreferrer"}
@@ -81,7 +83,7 @@ export default function BlogPostContent({ content }) {
                 display: "block",
                 marginLeft: "auto",
                 marginRight: "auto",
-                maxWidth: "55%",
+                maxWidth: { xs: "100%", md: "55%" },
                 height: "auto",
                 mb: 4,
               }}
@@ -126,7 +128,7 @@ export default function BlogPostContent({ content }) {
 
         case "li":
           return (
-            <Box component="li" sx={{ mb: 0 }}>
+            <Box component="li" sx={{ mb: 0, overflowWrap: "anywhere", wordBreak: "break-word" }}>
               {children}
             </Box>
           );
@@ -137,5 +139,9 @@ export default function BlogPostContent({ content }) {
     },
   };
 
-  return <>{parse(content, options)}</>;
+  return (
+    <Box sx={{ minWidth: 0, maxWidth: "100%", overflowWrap: "anywhere", wordBreak: "break-word" }}>
+      {parse(content, options)}
+    </Box>
+  );
 }

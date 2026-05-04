@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import SendIcon from "@mui/icons-material/Send";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import { Alert, Box, Button, CircularProgress, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
@@ -16,6 +18,7 @@ export default function BlogPost({ user }) {
   const [comment, setComment] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const canEdit = user?.username === "runitrench";
 
   const loadComments = useCallback(() => api(`/api/posts/${postId}/comments`).then(setComments), [postId]);
 
@@ -43,8 +46,23 @@ export default function BlogPost({ user }) {
     }
   };
 
+  const deletePost = async () => {
+    if (!window.confirm("Are you sure you want to delete this post?")) return;
+    try {
+      await api(`/api/posts/${postId}`, { method: "DELETE" });
+      navigate("/blog");
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   if (loading) {
-    return <CircularProgress />;
+    return (
+      <Paper elevation={0} sx={{ p: { xs: 3, md: 4 }, display: "flex", alignItems: "center", gap: 2 }}>
+        <CircularProgress size={24} />
+        <Typography color="text.secondary">Loading post...</Typography>
+      </Paper>
+    );
   }
 
   if (!post) {
@@ -57,7 +75,6 @@ export default function BlogPost({ user }) {
   }
 
   if (post.status === "draft") {
-    const canEdit = user?.username === "runitrench";
     return (
       <Stack spacing={3}>
         <AnimatedSection>
@@ -81,18 +98,36 @@ export default function BlogPost({ user }) {
   }
 
   return (
-    <Stack spacing={4}>
+    <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
       <AnimatedSection>
-        <Box>
-          <Typography variant="h1" color="blog.subheading">{decodeDisplayText(post.title)}</Typography>
-          <Typography color="text.secondary">
-            {new Date(post.createdAt).toLocaleString()}
-          </Typography>
-        </Box>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }} sx={{ width: "100%", minWidth: 0 }}>
+          <Box sx={{ flex: 1, width: "100%", minWidth: 0, maxWidth: { xs: "calc(100vw - 32px)", sm: "100%" } }}>
+            <Typography
+              variant="h1"
+              color="blog.subheading"
+              sx={{ width: "100%", maxWidth: "100%", fontSize: { xs: "2.15rem", sm: "clamp(2.55rem, 6vw, 5.4rem)" }, overflowWrap: "anywhere", wordBreak: "break-word" }}
+            >
+              {decodeDisplayText(post.title)}
+            </Typography>
+            <Typography color="text.secondary">
+              {new Date(post.createdAt).toLocaleString()}
+            </Typography>
+          </Box>
+          {canEdit && (
+            <Stack direction="row" spacing={1}>
+              <Button variant="outlined" startIcon={<EditIcon />} onClick={() => navigate(`/edit/${post.id}`)}>
+                Edit
+              </Button>
+              <Button color="error" variant="outlined" startIcon={<DeleteIcon />} onClick={deletePost}>
+                Delete
+              </Button>
+            </Stack>
+          )}
+        </Stack>
       </AnimatedSection>
 
       <AnimatedSection delay={80}>
-        <Paper elevation={0} sx={{ p: { xs: 3, md: 5 } }}>
+        <Paper elevation={0} sx={{ width: "100%", maxWidth: { xs: "calc(100vw - 32px)", sm: "100%" }, boxSizing: "border-box", p: { xs: 3, md: 5 }, minWidth: 0, overflowX: "hidden" }}>
           <BlogPostContent content={post.content} />
         </Paper>
       </AnimatedSection>

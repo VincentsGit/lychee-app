@@ -3,11 +3,17 @@ import { Box } from "@mui/material";
 
 export default function AnimatedSection({ children, delay = 0, sx = {} }) {
   const ref = useRef(null);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(true);
 
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
+    const revealIfInView = () => {
+      const rect = node.getBoundingClientRect();
+      if (rect.top < window.innerHeight && rect.bottom > 0) setVisible(true);
+    };
+    const fallbackId = window.setTimeout(() => setVisible(true), 900);
+    window.requestAnimationFrame(revealIfInView);
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
@@ -18,7 +24,10 @@ export default function AnimatedSection({ children, delay = 0, sx = {} }) {
       { threshold: 0.16, rootMargin: "0px 0px -60px 0px" },
     );
     observer.observe(node);
-    return () => observer.disconnect();
+    return () => {
+      window.clearTimeout(fallbackId);
+      observer.disconnect();
+    };
   }, []);
 
   return (
