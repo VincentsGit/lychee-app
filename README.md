@@ -1,60 +1,76 @@
-# lychee v2
+# lychee-app
 
-This is `runi-app-v2`, a second version of the lychee blog app.
+`lychee-app` is a personal blog and planning app built for Runi. It combines a cosy public website with a small owner-managed publishing workflow, user accounts, comments, travel checklists, and a Steam game tracking page.
 
-It keeps the same deployment infrastructure as v1:
+## Features
 
-- React + Vite frontend
-- Flask + SQLite backend
-- Nginx serving the built frontend over HTTPS
-- Docker Compose deployment
-- Existing Let's Encrypt certificate mounts for `lychee.blog`
-- Copied `backend/instance/app.db` and uploaded files from v1
-
-## What changed in v2
-
-- Modernised responsive UI with the same lavender/orange palette and playful art direction.
-- Scroll reveal animations for page sections.
-- Richer home page with clearer purpose and developer credit.
-- Blog archive grouped by year and month.
-- Editable About page for the `runitrench` account.
+- Public home, about, blog, travel, games, and socials pages.
+- React + Vite frontend with Material UI styling.
+- Flask backend with SQLite storage.
 - Public registration and login.
-- User settings page with avatar, display name, and about-me fields.
-- Public user profile pages at `/users/:id`.
-- Comments on blog posts for registered users.
-- Non-destructive database migrations run automatically when Flask starts.
+- User profiles with avatars, display names, and about-me text.
+- Blog archive grouped by date.
+- Rich-text post creation and editing for the owner account.
+- Comments on blog posts for signed-in users.
+- Editable About page for the owner account.
+- Travel overview pages with click-through checklist details.
+- Owner-only travel checklist ticking, so Runi can mark items off as she goes.
+- Steam games page for tracking purchased games and comparing regional store prices.
+- Docker Compose deployment with nginx serving the built frontend over HTTPS.
 
-## Deploy
+## Tech Stack
 
-From this directory:
+- Frontend: React, Vite, Material UI, TipTap
+- Backend: Flask, SQLite, gunicorn
+- Deployment: Docker Compose, nginx
+
+## Local Development
+
+Frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Backend:
+
+```bash
+cd backend
+pip install -r requirements.txt
+python app.py
+```
+
+## Docker Deployment
+
+From the repository root:
 
 ```bash
 docker compose build
 docker compose up -d
 ```
 
-The frontend listens on HTTPS port `8443`, matching v1. If v1 is already running on the same machine, stop it first or change one app's port mapping.
+The frontend container serves HTTPS on port `8443`, and the backend listens on port `5000`.
 
-The compose file still mounts:
+The compose setup expects certificate files to be mounted for nginx. Update `docker-compose.yml` and `nginx/nginx.conf` if deploying to a different domain or certificate path.
+
+## Environment Variables
+
+Steam tracking is optional. To enable it, provide these variables outside of git, for example in a local `.env` file:
 
 ```text
-/etc/letsencrypt/live/lychee.blog/fullchain.pem
-/etc/letsencrypt/live/lychee.blog/privkey.pem
+STEAM_API_KEY=your_steam_api_key
+STEAM_ID=your_steam_id
 ```
 
-so the existing DNS and certificate setup can continue to be used.
+Do not commit `.env` or production secrets. Runtime uploads, SQLite database files, certificate files, and local environment files are intentionally ignored.
 
 ## Database
 
-The copied SQLite database is stored at:
+The app uses SQLite and runs non-destructive startup migrations from the Flask app. Runtime database files live under `backend/instance/` and are ignored by git.
 
-```text
-backend/instance/app.db
-```
-
-On first v2 request, Flask adds the new columns/tables needed for profiles, editable pages, and comments without dropping existing users or blog posts.
-
-## User cleanup scripts
+## Maintenance Scripts
 
 List users:
 
@@ -74,4 +90,4 @@ For non-interactive deletion:
 ./scripts/delete-user-by-id.sh 12 --yes
 ```
 
-The delete script refuses to delete `runitrench`, creates a database backup first, deletes the user's comments and sessions, deletes the user row, and removes their uploaded avatar file if it belongs to the app uploads folder.
+The delete script refuses to delete the owner account, creates a database backup first, deletes the user's comments and sessions, deletes the user row, and removes their uploaded avatar file if it belongs to the app uploads folder.

@@ -3,3 +3,4 @@
 /backend/uploads/
 /backend/tmp-uploads/
 /nginx/
+.env
