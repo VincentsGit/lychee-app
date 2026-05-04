@@ -31,6 +31,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import Settings from "./pages/Settings";
 import Socials from "./pages/Socials";
+import Spotify from "./pages/Spotify";
 import SteamSavings from "./pages/SteamSavings";
 import Travel from "./pages/Travel";
 import User from "./pages/User";
@@ -70,6 +71,7 @@ function AppShell() {
     { label: "About", to: "/about" },
     { label: "Blog", to: "/blog" },
     { label: "Travel", to: "/travel" },
+    { label: "Spotify", to: "/spotify" },
     { label: "Games", to: "/games" },
     { label: "Socials", to: "/socials" },
   ];
@@ -218,6 +220,7 @@ function AppShell() {
             <Route path="/blog" element={<Blog user={user} />} />
             <Route path="/travel" element={<Travel user={user} />} />
             <Route path="/travel/:planId" element={<Travel user={user} />} />
+            <Route path="/spotify" element={<Spotify user={user} />} />
             <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
             <Route path="/edit/:postId" element={<EditPost />} />
             <Route path="/create" element={<Create />} />

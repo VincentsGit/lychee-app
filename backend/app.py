@@ -18,6 +18,11 @@ DEFAULT_ABOUT = """
 <p>Hi! Welcome to my website.</p>
 <p>This is where I can write a bit more about myself, keep my blog posts together, and make the site feel more like me.</p>
 """
+DEFAULT_SPOTIFY = json.dumps({
+    "title": "Spotify",
+    "playlistUrl": "",
+    "embedUrl": "",
+})
 OLD_DEFAULT_ABOUT = """
 <p>Welcome to lychee, a small personal corner of the internet for writing, updates, and notes worth keeping.</p>
 <p>This page can now be edited by runitrench from the website.</p>
@@ -307,6 +312,13 @@ def init_db():
         (DEFAULT_ABOUT,),
     )
     db.execute(
+        """
+        INSERT OR IGNORE INTO pages (slug, title, content)
+        VALUES ('spotify', 'Spotify', ?)
+        """,
+        (DEFAULT_SPOTIFY,),
+    )
+    db.execute(
         "UPDATE pages SET content = ? WHERE slug = 'about' AND content = ?",
         (DEFAULT_ABOUT, OLD_DEFAULT_ABOUT),
     )
@@ -424,6 +436,29 @@ def normalise_post_payload(data):
     if status == "draft":
         title = title or "Untitled draft"
     return title, content, status
+
+
+def spotify_embed_from_value(value):
+    raw = (value or "").strip()
+    if not raw:
+        return "", ""
+
+    iframe_match = re.search(r'<iframe[^>]+src=["\']([^"\']+)["\']', raw, flags=re.IGNORECASE)
+    candidate = iframe_match.group(1) if iframe_match else raw
+    candidate = html.unescape(candidate).strip()
+    parsed = urlparse(candidate)
+    if parsed.netloc not in ("open.spotify.com", "spotify.link"):
+        return None, None
+
+    path = parsed.path.rstrip("/")
+    playlist_match = re.search(r"/(?:embed/)?playlist/([A-Za-z0-9]+)$", path)
+    if not playlist_match:
+        return None, None
+
+    playlist_id = playlist_match.group(1)
+    playlist_url = f"https://open.spotify.com/playlist/{playlist_id}"
+    embed_url = f"https://open.spotify.com/embed/playlist/{playlist_id}?utm_source=generator"
+    return playlist_url, embed_url
 
 
 def chunked(items, size):
@@ -984,6 +1019,52 @@ def update_about():
     )
     db.commit()
     return jsonify({"success": True})
+
+
+@app.route("/spotify", methods=["GET"])
+def get_spotify():
+    db = get_db()
+    page = db.execute("SELECT title, content, updated_at FROM pages WHERE slug = 'spotify'").fetchone()
+    payload = {}
+    try:
+        payload = json.loads(page["content"] or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    return jsonify({
+        "title": payload.get("title") or page["title"] or "Spotify",
+        "playlistUrl": payload.get("playlistUrl") or "",
+        "embedUrl": payload.get("embedUrl") or "",
+        "updatedAt": page["updated_at"],
+    })
+
+
+@app.route("/spotify", methods=["PUT"])
+def update_spotify():
+    user = current_user()
+    if not is_runitrench(user):
+        return {"error": "Unauthorized"}, 401
+    data = request.get_json() or {}
+    title = (data.get("title") or "Spotify").strip()[:80] or "Spotify"
+    playlist_url, embed_url = spotify_embed_from_value(data.get("playlistUrl") or data.get("embedCode") or "")
+    if playlist_url is None:
+        return {"error": "Paste a Spotify playlist link or playlist embed code"}, 400
+
+    payload = {
+        "title": title,
+        "playlistUrl": playlist_url,
+        "embedUrl": embed_url,
+    }
+    db = get_db()
+    db.execute(
+        """
+        UPDATE pages
+        SET title = ?, content = ?, updated_at = ?, updated_by = ?
+        WHERE slug = 'spotify'
+        """,
+        (title, json.dumps(payload), datetime.now(), user["id"]),
+    )
+    db.commit()
+    return jsonify({"success": True, **payload})
 
 
 @app.route("/register", methods=["POST"])

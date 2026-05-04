@@ -15,6 +15,7 @@
 - Editable About page for the owner account.
 - Travel overview pages with click-through checklist details.
 - Owner-only travel checklist ticking, so Runi can mark items off as she goes.
+- Editable Spotify page for embedding Runi's current playlist.
 - Steam games page for tracking purchased games and comparing regional store prices.
 - Docker Compose deployment with nginx serving the built frontend over HTTPS.
 
