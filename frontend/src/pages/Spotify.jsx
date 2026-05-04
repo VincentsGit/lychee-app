@@ -5,7 +5,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import MusicNoteIcon from "@mui/icons-material/MusicNote";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
-import { Alert, Box, Button, IconButton, Link, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
 import AnimatedSection from "../components/AnimatedSection";
 import { api } from "../components/api";
 import { decodeDisplayText } from "../components/displayText";
@@ -200,9 +200,6 @@ export default function Spotify({ user }) {
                     allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
                     loading="lazy"
                   />
-                  <Link href={playlist.playlistUrl} target="_blank" rel="noopener noreferrer" sx={{ alignSelf: "flex-start" }}>
-                    Open playlist on Spotify
-                  </Link>
                 </Stack>
               ))}
             </Stack>
