@@ -1,17 +1,23 @@
 import { useEffect, useState } from "react";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import MusicNoteIcon from "@mui/icons-material/MusicNote";
 import SaveIcon from "@mui/icons-material/Save";
 import CloseIcon from "@mui/icons-material/Close";
-import { Alert, Box, Button, Link, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, IconButton, Link, Paper, Stack, TextField, Typography } from "@mui/material";
 import AnimatedSection from "../components/AnimatedSection";
 import { api } from "../components/api";
 import { decodeDisplayText } from "../components/displayText";
 
 const emptyPage = {
   title: "Spotify",
+  playlists: [],
+};
+
+const emptyPlaylist = {
+  label: "",
   playlistUrl: "",
-  embedUrl: "",
 };
 
 export default function Spotify({ user }) {
@@ -22,12 +28,22 @@ export default function Spotify({ user }) {
   const [status, setStatus] = useState("");
   const canEdit = user?.username === "runitrench";
 
+  const normalisePage = (data) => {
+    const playlists = Array.isArray(data.playlists)
+      ? data.playlists
+      : data.embedUrl
+        ? [{ label: data.title || "Playlist 1", playlistUrl: data.playlistUrl || data.embedUrl, embedUrl: data.embedUrl }]
+        : [];
+    return { ...emptyPage, ...data, playlists };
+  };
+
   const loadPage = async () => {
     setError("");
     try {
       const data = await api("/api/spotify");
-      setPage({ ...emptyPage, ...data });
-      setDraft({ ...emptyPage, ...data, playlistUrl: data.playlistUrl || data.embedUrl || "" });
+      const next = normalisePage(data);
+      setPage(next);
+      setDraft(next);
     } catch (err) {
       setError(err.message);
     }
@@ -40,7 +56,10 @@ export default function Spotify({ user }) {
   const startEditing = () => {
     setStatus("");
     setError("");
-    setDraft({ ...page, playlistUrl: page.playlistUrl || page.embedUrl || "" });
+    setDraft({
+      ...page,
+      playlists: page.playlists.length ? page.playlists : [{ ...emptyPlaylist, label: "Playlist 1" }],
+    });
     setEditing(true);
   };
 
@@ -52,13 +71,37 @@ export default function Spotify({ user }) {
         method: "PUT",
         body: JSON.stringify(draft),
       });
-      setPage({ ...emptyPage, ...data });
-      setDraft({ ...emptyPage, ...data, playlistUrl: data.playlistUrl || "" });
+      const next = normalisePage(data);
+      setPage(next);
+      setDraft(next);
       setEditing(false);
-      setStatus("Playlist saved.");
+      setStatus("Playlists saved.");
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const updatePlaylist = (index, field, value) => {
+    setDraft((current) => ({
+      ...current,
+      playlists: current.playlists.map((playlist, playlistIndex) => (
+        playlistIndex === index ? { ...playlist, [field]: value } : playlist
+      )),
+    }));
+  };
+
+  const addPlaylist = () => {
+    setDraft((current) => ({
+      ...current,
+      playlists: [...current.playlists, { ...emptyPlaylist, label: `Playlist ${current.playlists.length + 1}` }],
+    }));
+  };
+
+  const removePlaylist = (index) => {
+    setDraft((current) => ({
+      ...current,
+      playlists: current.playlists.filter((_, playlistIndex) => playlistIndex !== index),
+    }));
   };
 
   return (
@@ -75,7 +118,7 @@ export default function Spotify({ user }) {
             <Button
               variant={editing ? "outlined" : "contained"}
               startIcon={editing ? <CloseIcon /> : <EditIcon />}
-              onClick={() => setEditing((current) => !current)}
+              onClick={() => (editing ? setEditing(false) : startEditing())}
             >
               {editing ? "Cancel" : "Edit playlist"}
             </Button>
@@ -90,23 +133,45 @@ export default function Spotify({ user }) {
         <AnimatedSection delay={60}>
           <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
             <Stack spacing={2.5}>
-              <Typography variant="h2">Choose playlist</Typography>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }} justifyContent="space-between">
+                <Typography variant="h2">Choose playlists</Typography>
+                <Button startIcon={<AddIcon />} onClick={addPlaylist}>Add playlist</Button>
+              </Stack>
               <TextField
                 label="Page title"
                 value={draft.title}
                 onChange={(event) => setDraft({ ...draft, title: event.target.value })}
               />
-              <TextField
-                label="Spotify playlist link or embed code"
-                value={draft.playlistUrl}
-                onChange={(event) => setDraft({ ...draft, playlistUrl: event.target.value })}
-                multiline
-                minRows={3}
-                placeholder="https://open.spotify.com/playlist/..."
-              />
+              <Stack spacing={2}>
+                {draft.playlists.map((playlist, index) => (
+                  <Paper key={index} variant="outlined" sx={{ p: 2, boxShadow: "none" }}>
+                    <Stack spacing={1.5}>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }}>
+                        <TextField
+                          label="Playlist label"
+                          value={playlist.label}
+                          onChange={(event) => updatePlaylist(index, "label", event.target.value)}
+                          fullWidth
+                        />
+                        <IconButton onClick={() => removePlaylist(index)} aria-label="Remove playlist">
+                          <DeleteIcon />
+                        </IconButton>
+                      </Stack>
+                      <TextField
+                        label="Spotify playlist link or embed code"
+                        value={playlist.playlistUrl || playlist.embedUrl || ""}
+                        onChange={(event) => updatePlaylist(index, "playlistUrl", event.target.value)}
+                        multiline
+                        minRows={2}
+                        placeholder="https://open.spotify.com/playlist/..."
+                      />
+                    </Stack>
+                  </Paper>
+                ))}
+              </Stack>
               <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
                 <Button variant="contained" startIcon={<SaveIcon />} onClick={save}>
-                  Save playlist
+                  Save playlists
                 </Button>
               </Box>
             </Stack>
@@ -116,31 +181,36 @@ export default function Spotify({ user }) {
 
       <AnimatedSection delay={100}>
         <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, overflow: "hidden" }}>
-          {page.embedUrl ? (
-            <Stack spacing={2}>
-              <Box
-                component="iframe"
-                title={`${decodeDisplayText(page.title || "Spotify")} playlist`}
-                src={page.embedUrl}
-                sx={{
-                  display: "block",
-                  width: "100%",
-                  height: { xs: 520, md: 680 },
-                  border: 0,
-                  borderRadius: 2,
-                }}
-                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                loading="lazy"
-              />
-              <Link href={page.playlistUrl} target="_blank" rel="noopener noreferrer" sx={{ alignSelf: "flex-start" }}>
-                Open playlist on Spotify
-              </Link>
+          {page.playlists.length ? (
+            <Stack spacing={4}>
+              {page.playlists.map((playlist) => (
+                <Stack key={playlist.embedUrl} spacing={1.5}>
+                  <Typography variant="h2" color="blog.subheading">{decodeDisplayText(playlist.label)}</Typography>
+                  <Box
+                    component="iframe"
+                    title={`${decodeDisplayText(playlist.label)} Spotify playlist`}
+                    src={playlist.embedUrl}
+                    sx={{
+                      display: "block",
+                      width: "100%",
+                      height: { xs: 520, md: 680 },
+                      border: 0,
+                      borderRadius: 2,
+                    }}
+                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                    loading="lazy"
+                  />
+                  <Link href={playlist.playlistUrl} target="_blank" rel="noopener noreferrer" sx={{ alignSelf: "flex-start" }}>
+                    Open playlist on Spotify
+                  </Link>
+                </Stack>
+              ))}
             </Stack>
           ) : (
             <Stack spacing={2} alignItems="flex-start" sx={{ py: 4 }}>
               <MusicNoteIcon color="secondary" />
               <Typography variant="h2">No playlist yet.</Typography>
-              {canEdit && <Typography color="text.secondary">Paste a Spotify playlist link to show it here.</Typography>}
+              {canEdit && <Typography color="text.secondary">Paste Spotify playlist links to show them here.</Typography>}
             </Stack>
           )}
         </Paper>

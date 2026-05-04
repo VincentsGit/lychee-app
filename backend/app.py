@@ -20,8 +20,7 @@ DEFAULT_ABOUT = """
 """
 DEFAULT_SPOTIFY = json.dumps({
     "title": "Spotify",
-    "playlistUrl": "",
-    "embedUrl": "",
+    "playlists": [],
 })
 OLD_DEFAULT_ABOUT = """
 <p>Welcome to lychee, a small personal corner of the internet for writing, updates, and notes worth keeping.</p>
@@ -459,6 +458,55 @@ def spotify_embed_from_value(value):
     playlist_url = f"https://open.spotify.com/playlist/{playlist_id}"
     embed_url = f"https://open.spotify.com/embed/playlist/{playlist_id}?utm_source=generator"
     return playlist_url, embed_url
+
+
+def normalise_spotify_playlist(item, index):
+    label = (item.get("label") or item.get("title") or f"Playlist {index + 1}").strip()[:80]
+    playlist_url, embed_url = spotify_embed_from_value(item.get("playlistUrl") or item.get("embedUrl") or item.get("embedCode") or "")
+    if playlist_url is None:
+        return None, "Paste Spotify playlist links or playlist embed codes only"
+    if not playlist_url:
+        return None, None
+    return {
+        "label": label or f"Playlist {index + 1}",
+        "playlistUrl": playlist_url,
+        "embedUrl": embed_url,
+        "sortOrder": index,
+    }, None
+
+
+def spotify_payload_from_content(content, fallback_title="Spotify"):
+    payload = {}
+    try:
+        payload = json.loads(content or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+
+    playlists = payload.get("playlists")
+    if not isinstance(playlists, list):
+        playlists = []
+        if payload.get("playlistUrl") or payload.get("embedUrl"):
+            playlist, error = normalise_spotify_playlist({
+                "label": payload.get("title") or "Playlist 1",
+                "playlistUrl": payload.get("playlistUrl") or payload.get("embedUrl"),
+            }, 0)
+            if playlist and not error:
+                playlists.append(playlist)
+
+    normalised = []
+    for index, item in enumerate(playlists):
+        if not isinstance(item, dict):
+            continue
+        playlist, error = normalise_spotify_playlist(item, index)
+        if error:
+            continue
+        if playlist:
+            normalised.append(playlist)
+
+    return {
+        "title": payload.get("title") or fallback_title or "Spotify",
+        "playlists": normalised,
+    }
 
 
 def chunked(items, size):
@@ -1025,15 +1073,10 @@ def update_about():
 def get_spotify():
     db = get_db()
     page = db.execute("SELECT title, content, updated_at FROM pages WHERE slug = 'spotify'").fetchone()
-    payload = {}
-    try:
-        payload = json.loads(page["content"] or "{}")
-    except json.JSONDecodeError:
-        payload = {}
+    payload = spotify_payload_from_content(page["content"], page["title"])
     return jsonify({
-        "title": payload.get("title") or page["title"] or "Spotify",
-        "playlistUrl": payload.get("playlistUrl") or "",
-        "embedUrl": payload.get("embedUrl") or "",
+        "title": payload["title"],
+        "playlists": payload["playlists"],
         "updatedAt": page["updated_at"],
     })
 
@@ -1045,14 +1088,23 @@ def update_spotify():
         return {"error": "Unauthorized"}, 401
     data = request.get_json() or {}
     title = (data.get("title") or "Spotify").strip()[:80] or "Spotify"
-    playlist_url, embed_url = spotify_embed_from_value(data.get("playlistUrl") or data.get("embedCode") or "")
-    if playlist_url is None:
-        return {"error": "Paste a Spotify playlist link or playlist embed code"}, 400
+    playlist_inputs = data.get("playlists")
+    if not isinstance(playlist_inputs, list):
+        playlist_inputs = [{"label": "Playlist 1", "playlistUrl": data.get("playlistUrl") or data.get("embedCode") or ""}]
+
+    playlists = []
+    for index, item in enumerate(playlist_inputs):
+        if not isinstance(item, dict):
+            continue
+        playlist, error = normalise_spotify_playlist(item, index)
+        if error:
+            return {"error": error}, 400
+        if playlist:
+            playlists.append(playlist)
 
     payload = {
         "title": title,
-        "playlistUrl": playlist_url,
-        "embedUrl": embed_url,
+        "playlists": playlists,
     }
     db = get_db()
     db.execute(
