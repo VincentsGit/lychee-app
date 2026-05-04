@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -21,25 +21,26 @@ import {
 } from "@mui/material";
 import { ThemeProvider, responsiveFontSizes } from "@mui/material/styles";
 import { BrowserRouter, Link as RouterLink, Route, Routes, useNavigate } from "react-router-dom";
-import About from "./pages/About";
-import Blog from "./pages/Blog";
-import BlogPost from "./pages/BlogPost";
-import Create from "./pages/Create";
-import EditPost from "./pages/EditPost";
-import Home from "./pages/Home";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import Settings from "./pages/Settings";
-import Socials from "./pages/Socials";
-import Spotify from "./pages/Spotify";
-import SteamSavings from "./pages/SteamSavings";
-import Travel from "./pages/Travel";
-import User from "./pages/User";
 import { api } from "./components/api";
 import { decodeDisplayText } from "./components/displayText";
 import { getTheme } from "./components/theme";
 import UserAvatar from "./components/UserAvatar";
 import PandaIcon from "./icons/panda.png";
+
+const About = lazy(() => import("./pages/About"));
+const Blog = lazy(() => import("./pages/Blog"));
+const BlogPost = lazy(() => import("./pages/BlogPost"));
+const Create = lazy(() => import("./pages/Create"));
+const EditPost = lazy(() => import("./pages/EditPost"));
+const Home = lazy(() => import("./pages/Home"));
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Socials = lazy(() => import("./pages/Socials"));
+const Spotify = lazy(() => import("./pages/Spotify"));
+const SteamSavings = lazy(() => import("./pages/SteamSavings"));
+const Travel = lazy(() => import("./pages/Travel"));
+const User = lazy(() => import("./pages/User"));
 
 function AppShell() {
   const [mode, setMode] = useState("dark");
@@ -213,24 +214,26 @@ function AppShell() {
         </Drawer>
 
         <Container maxWidth="lg" sx={{ py: { xs: 3, md: 6 } }}>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/about" element={<About user={user} />} />
-            <Route path="/socials" element={<Socials />} />
-            <Route path="/blog" element={<Blog user={user} />} />
-            <Route path="/travel" element={<Travel user={user} />} />
-            <Route path="/travel/:planId" element={<Travel user={user} />} />
-            <Route path="/spotify" element={<Spotify user={user} />} />
-            <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
-            <Route path="/edit/:postId" element={<EditPost />} />
-            <Route path="/create" element={<Create />} />
-            <Route path="/login" element={<Login setUser={setUser} />} />
-            <Route path="/register" element={<Register setUser={setUser} />} />
-            <Route path="/settings" element={<Settings user={user} refreshUser={refreshUser} />} />
-            <Route path="/games" element={<SteamSavings />} />
-            <Route path="/steam-savings" element={<SteamSavings />} />
-            <Route path="/users/:userId" element={<User />} />
-          </Routes>
+          <Suspense fallback={<Typography color="text.secondary">Loading...</Typography>}>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/about" element={<About user={user} />} />
+              <Route path="/socials" element={<Socials />} />
+              <Route path="/blog" element={<Blog user={user} />} />
+              <Route path="/travel" element={<Travel user={user} />} />
+              <Route path="/travel/:planId" element={<Travel user={user} />} />
+              <Route path="/spotify" element={<Spotify user={user} />} />
+              <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
+              <Route path="/edit/:postId" element={<EditPost />} />
+              <Route path="/create" element={<Create />} />
+              <Route path="/login" element={<Login setUser={setUser} />} />
+              <Route path="/register" element={<Register setUser={setUser} />} />
+              <Route path="/settings" element={<Settings user={user} refreshUser={refreshUser} />} />
+              <Route path="/games" element={<SteamSavings />} />
+              <Route path="/steam-savings" element={<SteamSavings />} />
+              <Route path="/users/:userId" element={<User />} />
+            </Routes>
+          </Suspense>
         </Container>
       </Box>
     </ThemeProvider>

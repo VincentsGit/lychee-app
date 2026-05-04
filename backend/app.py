@@ -5,7 +5,7 @@ import shutil
 import sqlite3
 import json
 import html
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 import requests
@@ -40,6 +40,9 @@ STEAM_API_KEY = os.environ.get("STEAM_API_KEY", "")
 STEAM_ID = os.environ.get("STEAM_ID", "")
 STEAM_TIMEOUT = 12
 STEAM_STORE_FETCH_LIMIT_PER_COUNTRY = 70
+STEAM_PAYLOAD_CACHE_HOURS = 12
+STEAM_STORE_CACHE_DAYS = 14
+_last_cookie_cleanup = None
 
 
 def get_db():
@@ -271,6 +274,15 @@ def init_db():
     )
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS steam_payload_cache (
+            cache_key TEXT PRIMARY KEY,
+            payload TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    db.execute(
+        """
         CREATE TABLE IF NOT EXISTS travel_plans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
@@ -312,6 +324,14 @@ def init_db():
     if not column_exists(db, "travel_items", "completed_at"):
         db.execute("ALTER TABLE travel_items ADD COLUMN completed_at DATETIME")
     db.execute("UPDATE travel_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
+    for statement in [
+        "CREATE INDEX IF NOT EXISTS idx_posts_category_created ON posts(category, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_comments_post_created ON comments(post_id, created_at ASC)",
+        "CREATE INDEX IF NOT EXISTS idx_travel_items_plan_order ON travel_items(plan_id, sort_order ASC, id ASC)",
+        "CREATE INDEX IF NOT EXISTS idx_cookies_value ON cookies(cookie_value)",
+        "CREATE INDEX IF NOT EXISTS idx_cookies_created ON cookies(created_at)",
+    ]:
+        db.execute(statement)
     migrate_travel_posts(db)
     db.execute(
         """
@@ -342,16 +362,15 @@ def init_db():
     db.commit()
 
 
-@app.before_request
-def before_request():
-    init_db()
-
-
 @app.teardown_appcontext
 def close_db(exception=None):
     db = g.pop("db", None)
     if db is not None:
         db.close()
+
+
+with app.app_context():
+    init_db()
 
 
 def row_to_user(user):
@@ -368,9 +387,14 @@ def row_to_user(user):
 
 
 def cleanup_expired_cookies():
+    global _last_cookie_cleanup
+    now = datetime.utcnow()
+    if _last_cookie_cleanup and now - _last_cookie_cleanup < timedelta(hours=6):
+        return
     db = get_db()
     db.execute("DELETE FROM cookies WHERE datetime(created_at, '+7 days') <= CURRENT_TIMESTAMP")
     db.commit()
+    _last_cookie_cleanup = now
 
 
 def authorise(session_id):
@@ -561,15 +585,19 @@ def fetch_owned_steam_games():
 def fetch_steam_store_details(appids, country_code):
     db = get_db()
     details = {}
+    missing_appids = []
+    cache_cutoff = datetime.utcnow() - timedelta(days=STEAM_STORE_CACHE_DAYS)
     for appid in appids:
         cached = db.execute(
-            "SELECT payload FROM steam_store_cache WHERE appid = ? AND country = ?",
+            "SELECT payload, updated_at FROM steam_store_cache WHERE appid = ? AND country = ?",
             (appid, country_code),
         ).fetchone()
-        if cached:
+        if cached and datetime.fromisoformat(str(cached["updated_at"])) >= cache_cutoff:
             details[str(appid)] = json.loads(cached["payload"])
+        else:
+            missing_appids.append(appid)
 
-    for group in chunked(appids, 100):
+    for group in chunked(missing_appids[:STEAM_STORE_FETCH_LIMIT_PER_COUNTRY], 100):
         try:
             data = steam_get_json(
                 "https://api.steampowered.com/IStoreBrowseService/GetItems/v1/",
@@ -608,6 +636,8 @@ def fetch_steam_store_details(appids, country_code):
         except requests.RequestException:
             for appid in group:
                 details.setdefault(str(appid), {"success": False})
+    for appid in missing_appids[STEAM_STORE_FETCH_LIMIT_PER_COUNTRY:]:
+        details.setdefault(str(appid), {"success": False})
     return details
 
 
@@ -704,6 +734,26 @@ def travel_plan_payload(plan):
     }
 
 
+def travel_plan_summary_payload(plan):
+    keys = set(plan.keys())
+    item_count = plan["item_count"] if "item_count" in keys else 0
+    done_count = plan["done_count"] if "done_count" in keys and plan["done_count"] is not None else 0
+    return {
+        "id": plan["id"],
+        "title": plan["title"],
+        "destination": plan["destination"] or "",
+        "startDate": plan["start_date"] or "",
+        "endDate": plan["end_date"] or "",
+        "notes": plan["notes"] or "",
+        "sourcePostId": plan["source_post_id"],
+        "createdAt": plan["created_at"],
+        "updatedAt": plan["updated_at"],
+        "itemCount": item_count,
+        "doneCount": done_count,
+        "items": [],
+    }
+
+
 def normalise_travel_payload(data):
     title = (data.get("title") or "").strip()
     destination = (data.get("destination") or "").strip()
@@ -747,7 +797,41 @@ def fetch_zar_to_eur_rate():
     return data.get("rates", {}).get("EUR")
 
 
-def build_steam_savings_payload():
+def get_cached_steam_payload():
+    db = get_db()
+    cached = db.execute(
+        "SELECT payload, updated_at FROM steam_payload_cache WHERE cache_key = ?",
+        ("steam-savings",),
+    ).fetchone()
+    if not cached:
+        return None
+    updated_at = datetime.fromisoformat(str(cached["updated_at"]))
+    if datetime.utcnow() - updated_at > timedelta(hours=STEAM_PAYLOAD_CACHE_HOURS):
+        return None
+    return json.loads(cached["payload"])
+
+
+def save_cached_steam_payload(payload):
+    db = get_db()
+    db.execute(
+        """
+        INSERT INTO steam_payload_cache (cache_key, payload, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(cache_key)
+        DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at
+        """,
+        ("steam-savings", json.dumps(payload), datetime.utcnow()),
+    )
+    db.commit()
+
+
+def build_steam_savings_payload(force_refresh=False):
+    if not force_refresh:
+        cached_payload = get_cached_steam_payload()
+        if cached_payload:
+            cached_payload["summary"]["fromCache"] = True
+            return cached_payload, None
+
     owned_games, error = fetch_owned_steam_games()
     if error:
         return None, error
@@ -791,7 +875,7 @@ def build_steam_savings_payload():
 
     total_discount_eur = round(total_spain_eur - total_south_africa_eur, 2)
     total_discount_percent = round((total_discount_eur / total_spain_eur) * 100, 1) if total_spain_eur else 0
-    return {
+    payload = {
         "rows": rows,
         "summary": {
             "gameCount": len(rows),
@@ -801,8 +885,11 @@ def build_steam_savings_payload():
             "totalDiscountEur": total_discount_eur,
             "totalDiscountPercent": total_discount_percent,
             "refreshedAt": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "fromCache": False,
         },
-    }, None
+    }
+    save_cached_steam_payload(payload)
+    return payload, None
 
 
 def delete_upload_path(upload_url):
@@ -1272,12 +1359,30 @@ def get_travel_plans():
     db = get_db()
     plans = db.execute(
         """
-        SELECT id, title, destination, start_date, end_date, notes, source_post_id, created_at, updated_at
+        SELECT travel_plans.id, travel_plans.title, travel_plans.destination, travel_plans.start_date,
+               travel_plans.end_date, travel_plans.notes, travel_plans.source_post_id,
+               travel_plans.created_at, travel_plans.updated_at,
+               COUNT(travel_items.id) AS item_count,
+               SUM(CASE WHEN travel_items.is_done = 1 THEN 1 ELSE 0 END) AS done_count
         FROM travel_plans
-        ORDER BY COALESCE(NULLIF(start_date, ''), created_at) DESC, id DESC
+        LEFT JOIN travel_items ON travel_items.plan_id = travel_plans.id
+        GROUP BY travel_plans.id
+        ORDER BY COALESCE(NULLIF(travel_plans.start_date, ''), travel_plans.created_at) DESC, travel_plans.id DESC
         """
     ).fetchall()
-    return jsonify([travel_plan_payload(plan) for plan in plans])
+    return jsonify([travel_plan_summary_payload(plan) for plan in plans])
+
+
+@app.route("/travel-plans/<int:plan_id>", methods=["GET"])
+def get_travel_plan(plan_id):
+    db = get_db()
+    plan = db.execute(
+        "SELECT id, title, destination, start_date, end_date, notes, source_post_id, created_at, updated_at FROM travel_plans WHERE id = ?",
+        (plan_id,),
+    ).fetchone()
+    if not plan:
+        return {"error": "Travel plan not found"}, 404
+    return jsonify(travel_plan_payload(plan))
 
 
 @app.route("/travel-plans", methods=["POST"])
@@ -1359,7 +1464,7 @@ def delete_travel_plan(plan_id):
 @app.route("/steam-savings", methods=["GET"])
 def steam_savings():
     try:
-        payload, error = build_steam_savings_payload()
+        payload, error = build_steam_savings_payload(force_refresh=request.args.get("refresh") == "1")
     except requests.RequestException as exc:
         return {"error": f"Steam pricing refresh failed: {exc}"}, 502
     if error:

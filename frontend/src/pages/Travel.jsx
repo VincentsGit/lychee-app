@@ -110,12 +110,13 @@ export default function Travel({ user }) {
   const { planId } = useParams();
   const navigate = useNavigate();
   const [plans, setPlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState(emptyPlan);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const canEdit = user?.username === "runitrench";
-  const selectedPlan = planId ? plans.find((plan) => String(plan.id) === String(planId)) : null;
   const selectedChecklistGroups = useMemo(() => groupChecklistItems(selectedPlan?.items), [selectedPlan]);
 
   const loadPlans = async () => {
@@ -133,15 +134,53 @@ export default function Travel({ user }) {
     loadPlans();
   }, []);
 
+  useEffect(() => {
+    if (!planId) {
+      setSelectedPlan(null);
+      return;
+    }
+
+    let cancelled = false;
+    setDetailLoading(true);
+    setError("");
+    api(`/api/travel-plans/${planId}`)
+      .then((plan) => {
+        if (!cancelled) setSelectedPlan(plan);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setSelectedPlan(null);
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [planId]);
+
   const startNew = () => {
     navigate("/travel");
     setEditingId("new");
     setDraft(normaliseEditor(emptyPlan));
   };
 
-  const startEdit = (plan) => {
+  const loadPlanDetail = async (plan) => {
+    if (plan.items?.length || planId) return plan;
+    return api(`/api/travel-plans/${plan.id}`);
+  };
+
+  const startEdit = async (plan) => {
     setEditingId(plan.id);
-    setDraft(normaliseEditor(plan));
+    try {
+      setDraft(normaliseEditor(await loadPlanDetail(plan)));
+    } catch (err) {
+      setError(err.message);
+      setEditingId(null);
+    }
   };
 
   const updateDraft = (field, value) => {
@@ -177,6 +216,9 @@ export default function Travel({ user }) {
       setEditingId(null);
       setDraft(emptyPlan);
       await loadPlans();
+      if (planId) {
+        setSelectedPlan(await api(`/api/travel-plans/${planId}`));
+      }
       if (editingId === "new") navigate("/travel");
     } catch (err) {
       setError(err.message);
@@ -209,6 +251,7 @@ export default function Travel({ user }) {
     }
     try {
       await api(`/api/travel-plans/${nextPlan.id}`, { method: "PUT", body: JSON.stringify(nextPlan) });
+      await loadPlans();
     } catch (err) {
       setError(err.message);
       await loadPlans();
@@ -226,6 +269,9 @@ export default function Travel({ user }) {
     setEditingId(null);
     navigate(`/travel/${plan.id}`);
   };
+
+  const planDoneCount = (plan) => plan.doneCount ?? plan.items?.filter((item) => item.isDone).length ?? 0;
+  const planItemCount = (plan) => plan.itemCount ?? plan.items?.length ?? 0;
 
   const textWrapSx = {
     minWidth: 0,
@@ -246,7 +292,7 @@ export default function Travel({ user }) {
   };
 
   return (
-    <Stack spacing={4} sx={{ minWidth: 0, overflowX: "hidden" }}>
+    <Stack spacing={4} sx={{ width: "100%", minWidth: 0, maxWidth: "100%", overflowX: "hidden" }}>
       <AnimatedSection>
         <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-end" }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -267,7 +313,7 @@ export default function Travel({ user }) {
 
       {canEdit && editingId && (
         <AnimatedSection delay={60}>
-          <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
+          <Paper elevation={0} sx={{ width: "100%", maxWidth: { xs: "calc(100vw - 32px)", sm: "100%" }, boxSizing: "border-box", p: { xs: 2.5, md: 3.5 } }}>
             <Stack spacing={2.5}>
               <Typography variant="h2">{editingId === "new" ? "New travel plan" : "Edit travel plan"}</Typography>
               <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
@@ -290,7 +336,7 @@ export default function Travel({ user }) {
                   </Stack>
                 </Stack>
                 {draft.items.map((item, index) => (
-                  <Paper key={index} variant="outlined" sx={{ p: 2, boxShadow: "none", borderRadius: 2 }}>
+                  <Paper key={index} variant="outlined" sx={{ width: "100%", boxSizing: "border-box", p: 2, boxShadow: "none", borderRadius: 2 }}>
                     <Stack spacing={1.5}>
                       <TextField
                         label="Section"
@@ -318,7 +364,9 @@ export default function Travel({ user }) {
         </AnimatedSection>
       )}
 
-      {selectedPlan ? (
+      {planId && detailLoading ? (
+        <Typography color="text.secondary">Loading itinerary...</Typography>
+      ) : selectedPlan ? (
         <Stack spacing={3} sx={{ minWidth: 0 }}>
           <AnimatedSection>
             <Button startIcon={<ArrowBackIcon />} onClick={() => navigate("/travel")} sx={{ alignSelf: "flex-start" }}>
@@ -327,10 +375,10 @@ export default function Travel({ user }) {
           </AnimatedSection>
 
           <AnimatedSection delay={60}>
-            <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 }, minWidth: 0, overflow: "hidden" }}>
+            <Paper elevation={0} sx={{ width: "100%", maxWidth: { xs: "calc(100vw - 32px)", sm: "100%" }, boxSizing: "border-box", p: { xs: 2.5, md: 3.5 }, minWidth: 0, overflow: "hidden" }}>
               <Stack spacing={2.5} sx={{ minWidth: 0 }}>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }}>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }} sx={{ minWidth: 0 }}>
+                  <Box sx={{ flex: 1, width: "100%", minWidth: 0 }}>
                     <Typography variant="h2" color="blog.subheading" sx={textWrapSx}>
                       {decodeDisplayText(selectedPlan.title)}
                     </Typography>
@@ -339,7 +387,7 @@ export default function Travel({ user }) {
                         <Chip icon={<PlaceIcon />} label={decodeDisplayText(selectedPlan.destination)} variant="outlined" sx={chipWrapSx} />
                       )}
                       {planDate(selectedPlan) && <Chip icon={<CalendarMonthIcon />} label={planDate(selectedPlan)} variant="outlined" sx={chipWrapSx} />}
-                      <Chip label={`${selectedPlan.items.filter((item) => item.isDone).length}/${selectedPlan.items.length} done`} variant="outlined" />
+                      <Chip label={`${planDoneCount(selectedPlan)}/${planItemCount(selectedPlan)} done`} variant="outlined" />
                     </Stack>
                   </Box>
                   {canEdit && (
@@ -388,7 +436,7 @@ export default function Travel({ user }) {
                               sx={{ mt: -0.75, flexShrink: 0 }}
                             />
                             <Box sx={{ minWidth: 0, flex: 1, pt: 0.2 }}>
-                              <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ minWidth: 0 }}>
+                              <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ width: "100%", minWidth: 0 }}>
                                 <Typography
                                   fontWeight={800}
                                   sx={{
@@ -428,7 +476,7 @@ export default function Travel({ user }) {
                       </Stack>
                     </Box>
                   ))}
-                  {!selectedPlan.items.length && <Typography color="text.secondary">No checklist items yet.</Typography>}
+                  {!selectedPlan.items?.length && <Typography color="text.secondary">No checklist items yet.</Typography>}
                 </Stack>
               </Stack>
             </Paper>
@@ -440,7 +488,7 @@ export default function Travel({ user }) {
         <Stack spacing={2}>
           {plans.map((plan, index) => (
             <AnimatedSection key={plan.id} delay={index * 60}>
-              <Paper elevation={0} sx={{ p: { xs: 2, md: 2.5 }, minWidth: 0, overflow: "hidden" }}>
+              <Paper elevation={0} sx={{ width: "100%", maxWidth: { xs: "calc(100vw - 32px)", sm: "100%" }, boxSizing: "border-box", p: { xs: 2, md: 2.5 }, minWidth: 0, overflow: "hidden" }}>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "center" }}>
                   <Button
                     onClick={() => openPlan(plan)}
@@ -453,7 +501,7 @@ export default function Travel({ user }) {
                       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ minWidth: 0 }}>
                         {plan.destination && <Chip size="small" label={decodeDisplayText(plan.destination)} variant="outlined" sx={chipWrapSx} />}
                         {planDate(plan) && <Chip size="small" label={planDate(plan)} variant="outlined" sx={chipWrapSx} />}
-                        <Chip size="small" label={`${plan.items.filter((item) => item.isDone).length}/${plan.items.length} done`} variant="outlined" />
+                        <Chip size="small" label={`${planDoneCount(plan)}/${planItemCount(plan)} done`} variant="outlined" />
                       </Stack>
                     </Stack>
                   </Button>

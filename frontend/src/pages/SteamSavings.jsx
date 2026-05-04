@@ -81,11 +81,11 @@ export default function SteamSavings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const loadSavings = async () => {
+  const loadSavings = async ({ refresh = false } = {}) => {
     setLoading(true);
     setError("");
     try {
-      const data = await api("/api/steam-savings");
+      const data = await api(refresh ? "/api/steam-savings?refresh=1" : "/api/steam-savings");
       setRows((data.rows || []).map((row) => ({
         ...row,
         name: decodeDisplayText(row.name),
@@ -133,7 +133,7 @@ export default function SteamSavings() {
               A page for me to track all my purchased Steam games and compare what they cost in different stores.
             </Typography>
           </Box>
-          <Button variant="contained" startIcon={<RefreshIcon />} onClick={loadSavings} disabled={loading}>
+          <Button variant="contained" startIcon={<RefreshIcon />} onClick={() => loadSavings({ refresh: true })} disabled={loading}>
             Refresh
           </Button>
         </Stack>
@@ -154,6 +154,7 @@ export default function SteamSavings() {
               <Chip label={`${summary.gameCount} games`} variant="outlined" />
               <Chip label={`ZAR -> EUR ${Number(summary.zarToEurRate || 0).toFixed(4)}`} variant="outlined" />
               <Chip label={`Updated ${new Date(summary.refreshedAt).toLocaleString()}`} variant="outlined" />
+              {summary.fromCache && <Chip label="Cached" variant="outlined" />}
             </Box>
           </Stack>
         </AnimatedSection>
