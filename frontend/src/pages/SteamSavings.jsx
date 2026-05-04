@@ -130,7 +130,7 @@ export default function SteamSavings() {
           <Box sx={{ flex: 1 }}>
             <Typography variant="h1" color="blog.subheading">Games</Typography>
             <Typography color="text.secondary" sx={{ maxWidth: 760 }}>
-              Owned games compared between the Spanish Steam store and South African Steam store.
+              A page for me to track all my purchased Steam games and compare what they cost in different stores.
             </Typography>
           </Box>
           <Button variant="contained" startIcon={<RefreshIcon />} onClick={loadSavings} disabled={loading}>

@@ -283,11 +283,14 @@ def init_db():
             title TEXT NOT NULL,
             description TEXT DEFAULT '',
             url TEXT DEFAULT '',
+            is_done INTEGER DEFAULT 0,
             sort_order INTEGER DEFAULT 0,
             FOREIGN KEY (plan_id) REFERENCES travel_plans(id)
         )
         """
     )
+    if not column_exists(db, "travel_items", "is_done"):
+        db.execute("ALTER TABLE travel_items ADD COLUMN is_done INTEGER DEFAULT 0")
     migrate_travel_posts(db)
     db.execute(
         """
@@ -565,7 +568,7 @@ def travel_plan_payload(plan):
     db = get_db()
     items = db.execute(
         """
-        SELECT id, day_label, time_label, title, description, url, sort_order
+        SELECT id, day_label, time_label, title, description, url, is_done, sort_order
         FROM travel_items
         WHERE plan_id = ?
         ORDER BY sort_order ASC, id ASC
@@ -590,6 +593,7 @@ def travel_plan_payload(plan):
                 "title": item["title"],
                 "description": item["description"] or "",
                 "url": item["url"] or "",
+                "isDone": bool(item["is_done"]),
                 "sortOrder": item["sort_order"],
             }
             for item in items
@@ -614,6 +618,7 @@ def normalise_travel_payload(data):
             "title": item_title[:180],
             "description": (item.get("description") or "").strip()[:1200],
             "url": (item.get("url") or "").strip()[:800],
+            "isDone": 1 if item.get("isDone") else 0,
             "sortOrder": index,
         })
     return title, destination, start_date, end_date, notes, items
@@ -1134,10 +1139,10 @@ def create_travel_plan():
     for item in items:
         db.execute(
             """
-            INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["sortOrder"]),
+                INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, is_done, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["isDone"], item["sortOrder"]),
         )
     db.commit()
     plan = db.execute("SELECT * FROM travel_plans WHERE id = ?", (plan_id,)).fetchone()
@@ -1167,10 +1172,10 @@ def update_travel_plan(plan_id):
     for item in items:
         db.execute(
             """
-            INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, is_done, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["sortOrder"]),
+            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["isDone"], item["sortOrder"]),
         )
     db.commit()
     plan = db.execute("SELECT * FROM travel_plans WHERE id = ?", (plan_id,)).fetchone()

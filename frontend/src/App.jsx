@@ -217,6 +217,7 @@ function AppShell() {
             <Route path="/socials" element={<Socials />} />
             <Route path="/blog" element={<Blog user={user} />} />
             <Route path="/travel" element={<Travel user={user} />} />
+            <Route path="/travel/:planId" element={<Travel user={user} />} />
             <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
             <Route path="/edit/:postId" element={<EditPost />} />
             <Route path="/create" element={<Create />} />
