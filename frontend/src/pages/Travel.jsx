@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
@@ -21,6 +21,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { flushSync } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 import AnimatedSection from "../components/AnimatedSection";
 import { api } from "../components/api";
@@ -42,6 +43,8 @@ const emptyItem = {
   description: "",
   url: "",
   isDone: false,
+  createdAt: "",
+  completedAt: null,
 };
 
 function planDate(plan) {
@@ -57,6 +60,38 @@ function normaliseEditor(plan) {
   };
 }
 
+function sortChecklistItems(items = []) {
+  const dateValue = (value) => {
+    const parsed = Date.parse(value || "");
+    return Number.isNaN(parsed) ? null : parsed;
+  };
+
+  return [...items]
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const doneSort = Number(Boolean(a.item.isDone)) - Number(Boolean(b.item.isDone));
+      if (doneSort !== 0) return doneSort;
+      if (a.item.isDone && b.item.isDone) {
+        const firstCompleted = dateValue(a.item.completedAt);
+        const secondCompleted = dateValue(b.item.completedAt);
+        if (firstCompleted !== null && secondCompleted !== null && firstCompleted !== secondCompleted) {
+          return secondCompleted - firstCompleted;
+        }
+      } else {
+        const firstCreated = dateValue(a.item.createdAt);
+        const secondCreated = dateValue(b.item.createdAt);
+        if (firstCreated !== null && secondCreated !== null && firstCreated !== secondCreated) {
+          return firstCreated - secondCreated;
+        }
+      }
+      const firstOrder = Number.isFinite(a.item.sortOrder) ? a.item.sortOrder : a.index;
+      const secondOrder = Number.isFinite(b.item.sortOrder) ? b.item.sortOrder : b.index;
+      if (firstOrder !== secondOrder) return firstOrder - secondOrder;
+      return (a.item.id || 0) - (b.item.id || 0);
+    })
+    .map(({ item }) => item);
+}
+
 export default function Travel({ user }) {
   const { planId } = useParams();
   const navigate = useNavigate();
@@ -67,6 +102,7 @@ export default function Travel({ user }) {
   const [loading, setLoading] = useState(true);
   const canEdit = user?.username === "runitrench";
   const selectedPlan = planId ? plans.find((plan) => String(plan.id) === String(planId)) : null;
+  const selectedChecklistItems = useMemo(() => sortChecklistItems(selectedPlan?.items), [selectedPlan]);
 
   const loadPlans = async () => {
     setError("");
@@ -108,7 +144,7 @@ export default function Travel({ user }) {
   };
 
   const addItem = () => {
-    setDraft((current) => ({ ...current, items: [...current.items, { ...emptyItem }] }));
+    setDraft((current) => ({ ...current, items: [...current.items, { ...emptyItem, createdAt: new Date().toISOString() }] }));
   };
 
   const removeItem = (index) => {
@@ -138,10 +174,25 @@ export default function Travel({ user }) {
     const nextPlan = {
       ...selectedPlan,
       items: selectedPlan.items.map((item) => (
-        item.id === itemId ? { ...item, isDone: !item.isDone } : item
+        item.id === itemId
+          ? {
+              ...item,
+              isDone: !item.isDone,
+              completedAt: item.isDone ? null : new Date().toISOString(),
+            }
+          : item
       )),
     };
-    setPlans((current) => current.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
+    const applyNextPlan = () => {
+      setPlans((current) => current.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
+    };
+    if (document.startViewTransition) {
+      document.startViewTransition(() => {
+        flushSync(applyNextPlan);
+      });
+    } else {
+      applyNextPlan();
+    }
     try {
       await api(`/api/travel-plans/${nextPlan.id}`, { method: "PUT", body: JSON.stringify(nextPlan) });
     } catch (err) {
@@ -283,16 +334,17 @@ export default function Travel({ user }) {
                 )}
 
                 <Stack spacing={0} sx={{ minWidth: 0 }}>
-                  {selectedPlan.items.map((item, index) => (
+                  {selectedChecklistItems.map((item, index) => (
                     <Box
                       key={item.id}
                       sx={{
+                        viewTransitionName: `travel-item-${item.id}`,
                         display: "flex",
                         alignItems: "flex-start",
                         gap: 1.25,
                         py: { xs: 1.25, sm: 1.5 },
                         px: 0,
-                        borderBottom: index === selectedPlan.items.length - 1 ? "none" : "1px solid",
+                        borderBottom: index === selectedChecklistItems.length - 1 ? "none" : "1px solid",
                         borderColor: "divider",
                         minWidth: 0,
                       }}

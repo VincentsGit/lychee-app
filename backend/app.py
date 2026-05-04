@@ -284,6 +284,8 @@ def init_db():
             description TEXT DEFAULT '',
             url TEXT DEFAULT '',
             is_done INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            completed_at DATETIME DEFAULT NULL,
             sort_order INTEGER DEFAULT 0,
             FOREIGN KEY (plan_id) REFERENCES travel_plans(id)
         )
@@ -291,6 +293,11 @@ def init_db():
     )
     if not column_exists(db, "travel_items", "is_done"):
         db.execute("ALTER TABLE travel_items ADD COLUMN is_done INTEGER DEFAULT 0")
+    if not column_exists(db, "travel_items", "created_at"):
+        db.execute("ALTER TABLE travel_items ADD COLUMN created_at DATETIME")
+    if not column_exists(db, "travel_items", "completed_at"):
+        db.execute("ALTER TABLE travel_items ADD COLUMN completed_at DATETIME")
+    db.execute("UPDATE travel_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
     migrate_travel_posts(db)
     db.execute(
         """
@@ -568,7 +575,7 @@ def travel_plan_payload(plan):
     db = get_db()
     items = db.execute(
         """
-        SELECT id, day_label, time_label, title, description, url, is_done, sort_order
+        SELECT id, day_label, time_label, title, description, url, is_done, created_at, completed_at, sort_order
         FROM travel_items
         WHERE plan_id = ?
         ORDER BY sort_order ASC, id ASC
@@ -594,6 +601,8 @@ def travel_plan_payload(plan):
                 "description": item["description"] or "",
                 "url": item["url"] or "",
                 "isDone": bool(item["is_done"]),
+                "createdAt": item["created_at"],
+                "completedAt": item["completed_at"],
                 "sortOrder": item["sort_order"],
             }
             for item in items
@@ -612,13 +621,20 @@ def normalise_travel_payload(data):
         item_title = (item.get("title") or "").strip()
         if not item_title:
             continue
+        is_done = 1 if item.get("isDone") else 0
+        created_at = item.get("createdAt") or datetime.now()
+        completed_at = item.get("completedAt") if is_done else None
+        if is_done and not completed_at:
+            completed_at = datetime.now()
         items.append({
             "dayLabel": (item.get("dayLabel") or "").strip()[:80],
             "timeLabel": (item.get("timeLabel") or "").strip()[:40],
             "title": item_title[:180],
             "description": (item.get("description") or "").strip()[:1200],
             "url": (item.get("url") or "").strip()[:800],
-            "isDone": 1 if item.get("isDone") else 0,
+            "isDone": is_done,
+            "createdAt": created_at,
+            "completedAt": completed_at,
             "sortOrder": index,
         })
     return title, destination, start_date, end_date, notes, items
@@ -1139,10 +1155,10 @@ def create_travel_plan():
     for item in items:
         db.execute(
             """
-                INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, is_done, sort_order)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, is_done, created_at, completed_at, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["isDone"], item["sortOrder"]),
+            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["isDone"], item["createdAt"], item["completedAt"], item["sortOrder"]),
         )
     db.commit()
     plan = db.execute("SELECT * FROM travel_plans WHERE id = ?", (plan_id,)).fetchone()
@@ -1172,10 +1188,10 @@ def update_travel_plan(plan_id):
     for item in items:
         db.execute(
             """
-            INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, is_done, sort_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO travel_items (plan_id, day_label, time_label, title, description, url, is_done, created_at, completed_at, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["isDone"], item["sortOrder"]),
+            (plan_id, item["dayLabel"], item["timeLabel"], item["title"], item["description"], item["url"], item["isDone"], item["createdAt"], item["completedAt"], item["sortOrder"]),
         )
     db.commit()
     plan = db.execute("SELECT * FROM travel_plans WHERE id = ?", (plan_id,)).fetchone()
