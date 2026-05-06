@@ -1448,6 +1448,33 @@ def update_travel_plan(plan_id):
     return jsonify(travel_plan_payload(plan))
 
 
+@app.route("/travel-plans/<int:plan_id>/items/<int:item_id>", methods=["PATCH"])
+def update_travel_item(plan_id, item_id):
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    data = request.get_json() or {}
+    is_done = 1 if data.get("isDone") else 0
+    completed_at = datetime.now() if is_done else None
+    db = get_db()
+    plan = db.execute("SELECT * FROM travel_plans WHERE id = ?", (plan_id,)).fetchone()
+    if not plan:
+        return {"error": "Travel plan not found"}, 404
+    result = db.execute(
+        """
+        UPDATE travel_items
+        SET is_done = ?, completed_at = ?
+        WHERE id = ? AND plan_id = ?
+        """,
+        (is_done, completed_at, item_id, plan_id),
+    )
+    if result.rowcount == 0:
+        return {"error": "Travel item not found"}, 404
+    db.execute("UPDATE travel_plans SET updated_at = ? WHERE id = ?", (datetime.now(), plan_id))
+    db.commit()
+    plan = db.execute("SELECT * FROM travel_plans WHERE id = ?", (plan_id,)).fetchone()
+    return jsonify(travel_plan_payload(plan))
+
+
 @app.route("/travel-plans/<int:plan_id>", methods=["DELETE"])
 def delete_travel_plan(plan_id):
     if not is_runitrench(current_user()):

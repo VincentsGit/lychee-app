@@ -227,19 +227,23 @@ export default function Travel({ user }) {
 
   const toggleItemDone = async (itemId) => {
     if (!canEdit || !selectedPlan) return;
+    const targetItem = selectedPlan.items.find((item) => item.id === itemId);
+    if (!targetItem) return;
+    const nextIsDone = !targetItem.isDone;
     const nextPlan = {
       ...selectedPlan,
       items: selectedPlan.items.map((item) => (
         item.id === itemId
           ? {
               ...item,
-              isDone: !item.isDone,
-              completedAt: item.isDone ? null : new Date().toISOString(),
+              isDone: nextIsDone,
+              completedAt: nextIsDone ? new Date().toISOString() : null,
             }
           : item
       )),
     };
     const applyNextPlan = () => {
+      setSelectedPlan(nextPlan);
       setPlans((current) => current.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
     };
     if (document.startViewTransition) {
@@ -250,11 +254,16 @@ export default function Travel({ user }) {
       applyNextPlan();
     }
     try {
-      await api(`/api/travel-plans/${nextPlan.id}`, { method: "PUT", body: JSON.stringify(nextPlan) });
+      const savedPlan = await api(`/api/travel-plans/${nextPlan.id}/items/${itemId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ isDone: nextIsDone }),
+      });
+      setSelectedPlan(savedPlan);
       await loadPlans();
     } catch (err) {
       setError(err.message);
       await loadPlans();
+      setSelectedPlan(await api(`/api/travel-plans/${selectedPlan.id}`));
     }
   };
 
