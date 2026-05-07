@@ -2,22 +2,47 @@ import { useEffect, useMemo, useState } from "react";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
-import { Box, Button, Chip, IconButton, Paper, Stack, Typography } from "@mui/material";
+import { Box, Button, Chip, IconButton, Paper, Stack, Typography, useMediaQuery } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import { useNavigate } from "react-router-dom";
 import AnimatedSection from "../components/AnimatedSection";
 import { api } from "../components/api";
 import { decodeDisplayText } from "../components/displayText";
 
 const monthFormatter = new Intl.DateTimeFormat("en-GB", { month: "long" });
+const yearFormatter = new Intl.DateTimeFormat("en-GB", { year: "numeric" });
 
 function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function estimateMonthWeight(month) {
+  const titleWeight = month.posts.reduce((total, post) => total + Math.ceil(decodeDisplayText(post.title).length / 28), 0);
+  return 4 + month.posts.length * 3 + titleWeight;
+}
+
+function packMonths(months, columnCount) {
+  const columns = Array.from({ length: columnCount }, () => ({ weight: 0, months: [] }));
+
+  months.forEach((month) => {
+    const target = columns.reduce((lightest, column) => (
+      column.weight < lightest.weight ? column : lightest
+    ), columns[0]);
+    target.months.push(month);
+    target.weight += estimateMonthWeight(month);
+  });
+
+  return columns.map((column) => column.months);
 }
 
 export default function Blog({ user }) {
   const [posts, setPosts] = useState([]);
   const navigate = useNavigate();
   const canEdit = user?.username === "runitrench";
+  const theme = useTheme();
+  const isLarge = useMediaQuery(theme.breakpoints.up("lg"));
+  const isMedium = useMediaQuery(theme.breakpoints.up("md"));
+  const columnCount = isLarge ? 3 : isMedium ? 2 : 1;
 
   useEffect(() => {
     api("/api/posts")
@@ -25,20 +50,29 @@ export default function Blog({ user }) {
       .catch((err) => console.error("Failed to fetch posts:", err));
   }, []);
 
-  const grouped = useMemo(() => {
-    return posts.reduce((acc, post) => {
+  const monthCards = useMemo(() => {
+    const grouped = posts.reduce((acc, post) => {
       const date = new Date(post.createdAt);
-      const year = date.getFullYear();
       const month = monthKey(date);
-      acc[year] ||= {};
-      acc[year][month] ||= {
+      acc[month] ||= {
+        key: month,
         label: monthFormatter.format(date),
+        year: yearFormatter.format(date),
         posts: [],
       };
-      acc[year][month].posts.push(post);
+      acc[month].posts.push(post);
       return acc;
     }, {});
+
+    return Object.values(grouped)
+      .sort((a, b) => b.key.localeCompare(a.key))
+      .map((month) => ({
+        ...month,
+        posts: month.posts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+      }));
   }, [posts]);
+
+  const packedMonths = useMemo(() => packMonths(monthCards, columnCount), [columnCount, monthCards]);
 
   const handleClick = (post) => {
     if (post.status === "draft") {
@@ -55,6 +89,74 @@ export default function Blog({ user }) {
     setPosts(posts.filter((post) => post.id !== id));
   };
 
+  const renderPost = (post) => (
+    <Box
+      key={post.id}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        p: 1,
+        borderRadius: 2,
+        opacity: post.status === "draft" ? 0.58 : 1,
+        border: post.status === "draft" ? "1px dashed" : "1px solid transparent",
+        borderColor: post.status === "draft" ? "divider" : "transparent",
+        transition: "background-color 180ms ease, transform 180ms ease",
+        "&:hover": { bgcolor: "action.hover", transform: "translateX(4px)" },
+      }}
+    >
+      <Button
+        onClick={() => handleClick(post)}
+        disabled={post.status === "draft" && !canEdit}
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          justifyContent: "flex-start",
+          textAlign: "left",
+          px: 1,
+          py: 0.75,
+        }}
+      >
+        <Stack alignItems="flex-start" sx={{ minWidth: 0 }}>
+          <Typography fontWeight={800} sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
+            {decodeDisplayText(post.title)}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {new Date(post.createdAt).toLocaleDateString()}
+          </Typography>
+        </Stack>
+      </Button>
+      {post.status === "draft" ? (
+        <Chip label="Draft" size="small" variant="outlined" sx={{ flexShrink: 0 }} />
+      ) : (
+        <Chip icon={<ChatBubbleOutlineIcon />} label={post.commentCount || 0} size="small" variant="outlined" sx={{ flexShrink: 0 }} />
+      )}
+      {canEdit && (
+        <Stack direction="row" sx={{ flexShrink: 0 }}>
+          <IconButton onClick={() => navigate(`/edit/${post.id}`)} aria-label="Edit post" size="small"><EditIcon fontSize="small" /></IconButton>
+          <IconButton onClick={() => handleDelete(post.id)} aria-label="Delete post" size="small"><DeleteIcon fontSize="small" /></IconButton>
+        </Stack>
+      )}
+    </Box>
+  );
+
+  const renderMonth = (month) => (
+    <Paper key={month.key} elevation={0} sx={{ p: { xs: 2.25, md: 2.5 } }}>
+      <Stack spacing={1.5}>
+        <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="flex-start">
+          <Box>
+            <Typography variant="h3" color="blog.subheading">{month.label}</Typography>
+            <Typography variant="caption" color="text.secondary">{month.year}</Typography>
+          </Box>
+          <Chip label={`${month.posts.length} ${month.posts.length === 1 ? "post" : "posts"}`} size="small" variant="outlined" />
+        </Stack>
+        <Stack spacing={0.75}>
+          {month.posts.map(renderPost)}
+        </Stack>
+      </Stack>
+    </Paper>
+  );
+
   return (
     <Stack spacing={4}>
       <AnimatedSection>
@@ -66,61 +168,15 @@ export default function Blog({ user }) {
         </Box>
       </AnimatedSection>
 
-      {Object.keys(grouped).sort((a, b) => b - a).map((year) => (
-        <AnimatedSection key={year}>
-          <Stack spacing={2.5}>
-            <Typography variant="h2">{year}</Typography>
-            {Object.keys(grouped[year]).sort((a, b) => b.localeCompare(a)).map((month) => (
-              <Paper key={`${year}-${month}`} elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
-                <Typography variant="h3" color="blog.subheading" sx={{ mb: 2 }}>{grouped[year][month].label}</Typography>
-                <Stack spacing={1.5}>
-                  {grouped[year][month].posts.map((post) => (
-                    <Box
-                      key={post.id}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 1.5,
-                        p: 1.5,
-                        borderRadius: 2,
-                        opacity: post.status === "draft" ? 0.58 : 1,
-                        border: post.status === "draft" ? "1px dashed" : "1px solid transparent",
-                        borderColor: post.status === "draft" ? "divider" : "transparent",
-                        transition: "background-color 180ms ease, transform 180ms ease",
-                        "&:hover": { bgcolor: "action.hover", transform: "translateX(4px)" },
-                      }}
-                    >
-                      <Button
-                        onClick={() => handleClick(post)}
-                        disabled={post.status === "draft" && !canEdit}
-                        sx={{ flex: 1, justifyContent: "flex-start", textAlign: "left" }}
-                      >
-                        <Stack alignItems="flex-start">
-                          <Typography fontWeight={800}>{decodeDisplayText(post.title)}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            {new Date(post.createdAt).toLocaleDateString()}
-                          </Typography>
-                        </Stack>
-                      </Button>
-                      {post.status === "draft" ? (
-                        <Chip label="Needs finishing" size="small" variant="outlined" />
-                      ) : (
-                        <Chip icon={<ChatBubbleOutlineIcon />} label={post.commentCount || 0} size="small" variant="outlined" />
-                      )}
-                      {canEdit && (
-                        <Stack direction="row">
-                          <IconButton onClick={() => navigate(`/edit/${post.id}`)} aria-label="Edit post"><EditIcon /></IconButton>
-                          <IconButton onClick={() => handleDelete(post.id)} aria-label="Delete post"><DeleteIcon /></IconButton>
-                        </Stack>
-                      )}
-                    </Box>
-                  ))}
-                </Stack>
-              </Paper>
-            ))}
-          </Stack>
-        </AnimatedSection>
-      ))}
+      <AnimatedSection>
+        <Box sx={{ display: "grid", gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gap: 2.5, alignItems: "start" }}>
+          {packedMonths.map((column, index) => (
+            <Stack key={index} spacing={2.5} sx={{ minWidth: 0 }}>
+              {column.map(renderMonth)}
+            </Stack>
+          ))}
+        </Box>
+      </AnimatedSection>
     </Stack>
   );
 }
