@@ -216,7 +216,7 @@ function AppShell() {
         <Container maxWidth="lg" sx={{ py: { xs: 3, md: 6 } }}>
           <Suspense fallback={<Typography color="text.secondary">Loading...</Typography>}>
             <Routes>
-              <Route path="/" element={<Home />} />
+              <Route path="/" element={<Home user={user} />} />
               <Route path="/about" element={<About user={user} />} />
               <Route path="/socials" element={<Socials />} />
               <Route path="/blog" element={<Blog user={user} />} />

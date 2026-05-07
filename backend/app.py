@@ -22,6 +22,46 @@ DEFAULT_SPOTIFY = json.dumps({
     "title": "Spotify",
     "playlists": [],
 })
+DEFAULT_HOME_OBJECT = {
+    "hero": {
+        "chips": [
+            {"label": "my blog", "variant": "filled"},
+            {"label": "thoughts, memories, comments", "variant": "outlined"},
+        ],
+        "title": "Welcome to my website!",
+        "intro": "This is my little corner of the internet where I can write about whatever I want, keep memories in one place, and share updates without everything disappearing into social media.",
+        "primaryButton": {"label": "Read my blog", "to": "/blog"},
+        "secondaryButton": {"label": "Leave a comment", "to": "/register"},
+        "pandaImage": "bounce",
+        "imageAlt": "Bouncing panda",
+        "showLavender": True,
+        "showFlowers": True,
+    },
+    "bubbles": [
+        {
+            "icon": "stories",
+            "title": "My little diary",
+            "text": "I can keep all my posts in one place, grouped by year and month so they are easy to look back on later.",
+        },
+        {
+            "icon": "comments",
+            "title": "Comments are open",
+            "text": "Make an account if you want to comment on my posts and have your own cute little profile.",
+        },
+        {
+            "icon": "heart",
+            "title": "Made by Vincent",
+            "text": "This website was designed and developed by Vincent, my boyfriend, who also kept my lavender colours and cute lychee vibe.",
+        },
+    ],
+    "cta": {
+        "title": "Why I wanted this",
+        "text": "I wanted somewhere that felt more mine than a normal social media page. Somewhere cosy for thoughts, photos, videos, plans, comments, and anything else I feel like saving.",
+        "buttonLabel": "More about me",
+        "buttonTo": "/about",
+    },
+}
+DEFAULT_HOME = json.dumps(DEFAULT_HOME_OBJECT)
 OLD_DEFAULT_ABOUT = """
 <p>Welcome to lychee, a small personal corner of the internet for writing, updates, and notes worth keeping.</p>
 <p>This page can now be edited by runitrench from the website.</p>
@@ -343,6 +383,13 @@ def init_db():
     db.execute(
         """
         INSERT OR IGNORE INTO pages (slug, title, content)
+        VALUES ('home', 'Home', ?)
+        """,
+        (DEFAULT_HOME,),
+    )
+    db.execute(
+        """
+        INSERT OR IGNORE INTO pages (slug, title, content)
         VALUES ('spotify', 'Spotify', ?)
         """,
         (DEFAULT_SPOTIFY,),
@@ -540,6 +587,98 @@ def spotify_payload_from_content(content, fallback_title="Spotify"):
     return {
         "title": payload.get("title") or fallback_title or "Spotify",
         "playlists": normalised,
+    }
+
+
+def home_payload_from_content(content):
+    try:
+        payload = json.loads(content or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    return normalise_home_payload(payload)
+
+
+def normalise_home_text(value, fallback="", limit=400):
+    text = value if isinstance(value, str) else fallback
+    text = (text or fallback or "").strip()
+    return text[:limit]
+
+
+def normalise_home_path(value, fallback="/"):
+    path = normalise_home_text(value, fallback, 200)
+    if not path.startswith("/"):
+        return fallback
+    return path
+
+
+def normalise_home_button(value, fallback):
+    value = value if isinstance(value, dict) else {}
+    return {
+        "label": normalise_home_text(value.get("label"), fallback["label"], 80),
+        "to": normalise_home_path(value.get("to"), fallback["to"]),
+    }
+
+
+def normalise_home_payload(data):
+    data = data if isinstance(data, dict) else {}
+    default = DEFAULT_HOME_OBJECT
+    hero = data.get("hero") if isinstance(data.get("hero"), dict) else {}
+    cta = data.get("cta") if isinstance(data.get("cta"), dict) else {}
+
+    chips = []
+    for index, chip in enumerate(hero.get("chips") or []):
+        if not isinstance(chip, dict):
+            continue
+        label = normalise_home_text(chip.get("label"), "", 80)
+        if not label:
+            continue
+        chips.append({
+            "label": label,
+            "variant": "outlined" if chip.get("variant") == "outlined" else "filled",
+        })
+        if len(chips) >= 4:
+            break
+    if not chips:
+        chips = default["hero"]["chips"]
+
+    bubbles = []
+    allowed_icons = {"stories", "comments", "heart"}
+    for bubble in data.get("bubbles") or []:
+        if not isinstance(bubble, dict):
+            continue
+        title = normalise_home_text(bubble.get("title"), "", 120)
+        text = normalise_home_text(bubble.get("text"), "", 600)
+        if not title and not text:
+            continue
+        bubbles.append({
+            "icon": bubble.get("icon") if bubble.get("icon") in allowed_icons else "heart",
+            "title": title or "Untitled bubble",
+            "text": text,
+        })
+        if len(bubbles) >= 6:
+            break
+    if not bubbles:
+        bubbles = default["bubbles"]
+
+    return {
+        "hero": {
+            "chips": chips,
+            "title": normalise_home_text(hero.get("title"), default["hero"]["title"], 160),
+            "intro": normalise_home_text(hero.get("intro"), default["hero"]["intro"], 700),
+            "primaryButton": normalise_home_button(hero.get("primaryButton"), default["hero"]["primaryButton"]),
+            "secondaryButton": normalise_home_button(hero.get("secondaryButton"), default["hero"]["secondaryButton"]),
+            "pandaImage": hero.get("pandaImage") if hero.get("pandaImage") in {"bounce", "dance", "static"} else "bounce",
+            "imageAlt": normalise_home_text(hero.get("imageAlt"), default["hero"]["imageAlt"], 120),
+            "showLavender": bool(hero.get("showLavender", True)),
+            "showFlowers": bool(hero.get("showFlowers", True)),
+        },
+        "bubbles": bubbles,
+        "cta": {
+            "title": normalise_home_text(cta.get("title"), default["cta"]["title"], 160),
+            "text": normalise_home_text(cta.get("text"), default["cta"]["text"], 700),
+            "buttonLabel": normalise_home_text(cta.get("buttonLabel"), default["cta"]["buttonLabel"], 80),
+            "buttonTo": normalise_home_path(cta.get("buttonTo"), default["cta"]["buttonTo"]),
+        },
     }
 
 
@@ -1134,6 +1273,34 @@ def create_comment(post_id):
     )
     db.commit()
     return jsonify({"success": True, "id": cursor.lastrowid}), 201
+
+
+@app.route("/home", methods=["GET"])
+def get_home():
+    db = get_db()
+    page = db.execute("SELECT title, content, updated_at FROM pages WHERE slug = 'home'").fetchone()
+    if not page:
+        return jsonify({**DEFAULT_HOME_OBJECT, "updatedAt": None})
+    return jsonify({**home_payload_from_content(page["content"]), "updatedAt": page["updated_at"]})
+
+
+@app.route("/home", methods=["PUT"])
+def update_home():
+    user = current_user()
+    if not is_runitrench(user):
+        return {"error": "Unauthorized"}, 401
+    payload = normalise_home_payload(request.get_json() or {})
+    db = get_db()
+    db.execute(
+        """
+        UPDATE pages
+        SET title = ?, content = ?, updated_at = ?, updated_by = ?
+        WHERE slug = 'home'
+        """,
+        ("Home", json.dumps(payload), datetime.now(), user["id"]),
+    )
+    db.commit()
+    return jsonify({"success": True, **payload})
 
 
 @app.route("/about", methods=["GET"])
