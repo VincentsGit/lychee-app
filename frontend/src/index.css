@@ -4,12 +4,21 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  scrollbar-width: none;
 }
 
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
 }
 
 a {

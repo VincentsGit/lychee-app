@@ -219,10 +219,9 @@ export default function Home({ user }) {
       sx={{
         alignItems: "center",
         boxSizing: "border-box",
-        width: "100vw",
-        maxWidth: "100vw",
-        mx: "calc(50% - 50vw)",
-        px: { xs: 2, sm: 4, lg: 6 },
+        width: "100%",
+        maxWidth: 1120,
+        mx: "auto",
         overflowX: "clip",
       }}
     >
