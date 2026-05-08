@@ -7,9 +7,12 @@ import { api } from "../components/api";
 
 export default function Settings({ user, refreshUser }) {
   const [form, setForm] = useState({ displayName: "", aboutMe: "", avatarUrl: "" });
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "" });
   const [deletePassword, setDeletePassword] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [passwordStatus, setPasswordStatus] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const navigate = useNavigate();
 
@@ -70,6 +73,31 @@ export default function Settings({ user, refreshUser }) {
     }
   };
 
+  const changePassword = async (event) => {
+    event.preventDefault();
+    setPasswordStatus("");
+    setPasswordError("");
+    if (!passwordForm.currentPassword) {
+      setPasswordError("Type your current password first.");
+      return;
+    }
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordError("New password must be at least 8 characters.");
+      return;
+    }
+
+    try {
+      await api("/api/settings/change-password", {
+        method: "POST",
+        body: JSON.stringify(passwordForm),
+      });
+      setPasswordForm({ currentPassword: "", newPassword: "" });
+      setPasswordStatus("Password changed.");
+    } catch (err) {
+      setPasswordError(err.message);
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -100,6 +128,36 @@ export default function Settings({ user, refreshUser }) {
               inputProps={{ maxLength: 1000 }}
             />
             <Button type="submit" variant="contained" size="large">Save settings</Button>
+          </Stack>
+        </Box>
+      </Paper>
+      <Paper elevation={0} sx={{ maxWidth: 760, mx: "auto", mt: 3, p: { xs: 3, md: 4 } }}>
+        <Box component="form" onSubmit={changePassword}>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="h2" color="blog.subheading">Change password</Typography>
+              <Typography color="text.secondary">Type your current password and choose a new one.</Typography>
+            </Box>
+            {passwordError && <Alert severity="error">{passwordError}</Alert>}
+            {passwordStatus && <Alert severity="success">{passwordStatus}</Alert>}
+            <TextField
+              label="Current password"
+              type="password"
+              value={passwordForm.currentPassword}
+              onChange={(event) => setPasswordForm({ ...passwordForm, currentPassword: event.target.value })}
+              autoComplete="current-password"
+            />
+            <TextField
+              label="New password"
+              type="password"
+              value={passwordForm.newPassword}
+              onChange={(event) => setPasswordForm({ ...passwordForm, newPassword: event.target.value })}
+              helperText="At least 8 characters."
+              autoComplete="new-password"
+            />
+            <Box>
+              <Button type="submit" variant="contained">Change password</Button>
+            </Box>
           </Stack>
         </Box>
       </Paper>

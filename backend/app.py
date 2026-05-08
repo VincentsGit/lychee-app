@@ -1451,6 +1451,36 @@ def update_settings():
     return jsonify({"success": True})
 
 
+@app.route("/settings/change-password", methods=["POST"])
+def change_password():
+    user = current_user()
+    if not user:
+        return {"error": "Unauthorized"}, 401
+
+    data = request.get_json() or {}
+    current_password = data.get("currentPassword") or ""
+    new_password = data.get("newPassword") or ""
+    if not current_password:
+        return {"error": "Type your current password first."}, 400
+    if len(new_password) < 8:
+        return {"error": "New password must be at least 8 characters."}, 400
+
+    db = get_db()
+    account = db.execute(
+        "SELECT id, password_hash FROM users WHERE id = ?",
+        (user["id"],),
+    ).fetchone()
+    if not account or not check_password_hash(account["password_hash"], current_password):
+        return {"error": "Current password is incorrect"}, 401
+
+    db.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (generate_password_hash(new_password, method="pbkdf2:sha256"), user["id"]),
+    )
+    db.commit()
+    return jsonify({"success": True})
+
+
 @app.route("/settings/delete-account", methods=["DELETE"])
 def delete_account():
     user = current_user()
