@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
-import { Box, Button, Chip, IconButton, Paper, Stack, Typography, useMediaQuery } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
+import { Box, Button, Chip, IconButton, Paper, Stack, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import AnimatedSection from "../components/AnimatedSection";
 import { api } from "../components/api";
@@ -16,33 +15,10 @@ function monthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function estimateMonthWeight(month) {
-  const titleWeight = month.posts.reduce((total, post) => total + Math.ceil(decodeDisplayText(post.title).length / 28), 0);
-  return 4 + month.posts.length * 3 + titleWeight;
-}
-
-function packMonths(months, columnCount) {
-  const columns = Array.from({ length: columnCount }, () => ({ weight: 0, months: [] }));
-
-  months.forEach((month) => {
-    const target = columns.reduce((lightest, column) => (
-      column.weight < lightest.weight ? column : lightest
-    ), columns[0]);
-    target.months.push(month);
-    target.weight += estimateMonthWeight(month);
-  });
-
-  return columns.map((column) => column.months);
-}
-
 export default function Blog({ user }) {
   const [posts, setPosts] = useState([]);
   const navigate = useNavigate();
   const canEdit = user?.username === "runitrench";
-  const theme = useTheme();
-  const isLarge = useMediaQuery(theme.breakpoints.up("lg"));
-  const isMedium = useMediaQuery(theme.breakpoints.up("md"));
-  const columnCount = isLarge ? 3 : isMedium ? 2 : 1;
 
   useEffect(() => {
     api("/api/posts")
@@ -71,8 +47,6 @@ export default function Blog({ user }) {
         posts: month.posts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
       }));
   }, [posts]);
-
-  const packedMonths = useMemo(() => packMonths(monthCards, columnCount), [columnCount, monthCards]);
 
   const handleClick = (post) => {
     if (post.status === "draft") {
@@ -169,12 +143,15 @@ export default function Blog({ user }) {
       </AnimatedSection>
 
       <AnimatedSection>
-        <Box sx={{ display: "grid", gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`, gap: 2.5, alignItems: "start" }}>
-          {packedMonths.map((column, index) => (
-            <Stack key={index} spacing={2.5} sx={{ minWidth: 0 }}>
-              {column.map(renderMonth)}
-            </Stack>
-          ))}
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))", lg: "repeat(3, minmax(0, 1fr))" },
+            gap: 2.5,
+            alignItems: "start",
+          }}
+        >
+          {monthCards.map(renderMonth)}
         </Box>
       </AnimatedSection>
     </Stack>

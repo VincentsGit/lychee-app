@@ -54,12 +54,6 @@ DEFAULT_HOME_OBJECT = {
             "text": "This website was designed and developed by Vincent, my boyfriend, who also captured my lavender colours and cute lychee vibe.",
         },
     ],
-    "cta": {
-        "title": "Why I wanted this",
-        "text": "I wanted somewhere that felt more mine than a normal social media page. Somewhere cosy for thoughts, photos, videos, plans, comments, and anything else I feel like saving.",
-        "buttonLabel": "More about me",
-        "buttonTo": "/about",
-    },
 }
 DEFAULT_HOME = json.dumps(DEFAULT_HOME_OBJECT)
 OLD_DEFAULT_ABOUT = """
@@ -623,7 +617,6 @@ def normalise_home_payload(data):
     data = data if isinstance(data, dict) else {}
     default = DEFAULT_HOME_OBJECT
     hero = data.get("hero") if isinstance(data.get("hero"), dict) else {}
-    cta = data.get("cta") if isinstance(data.get("cta"), dict) else {}
 
     chips = []
     for index, chip in enumerate(hero.get("chips") or []):
@@ -673,12 +666,6 @@ def normalise_home_payload(data):
             "showFlowers": bool(hero.get("showFlowers", True)),
         },
         "bubbles": bubbles,
-        "cta": {
-            "title": normalise_home_text(cta.get("title"), default["cta"]["title"], 160),
-            "text": normalise_home_text(cta.get("text"), default["cta"]["text"], 700),
-            "buttonLabel": normalise_home_text(cta.get("buttonLabel"), default["cta"]["buttonLabel"], 80),
-            "buttonTo": normalise_home_path(cta.get("buttonTo"), default["cta"]["buttonTo"]),
-        },
     }
 
 

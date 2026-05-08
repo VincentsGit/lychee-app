@@ -7,6 +7,8 @@ import SaveIcon from "@mui/icons-material/Save";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import PlaceIcon from "@mui/icons-material/Place";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import PublicIcon from "@mui/icons-material/Public";
 import {
   Alert,
   Box,
@@ -47,6 +49,8 @@ const emptyItem = {
   createdAt: "",
   completedAt: null,
 };
+
+const SKRATCH_VISITED_URL = "https://share.skratch.world/MyPPXTYk9L/visited";
 
 function planDate(plan) {
   if (plan.startDate && plan.endDate) return `${plan.startDate} to ${plan.endDate}`;
@@ -319,6 +323,67 @@ export default function Travel({ user }) {
       </AnimatedSection>
 
       {error && <Alert severity="error">{error}</Alert>}
+
+      <AnimatedSection delay={40}>
+        <Paper
+          elevation={0}
+          sx={{
+            width: "100%",
+            maxWidth: { xs: "calc(100vw - 32px)", sm: "100%" },
+            boxSizing: "border-box",
+            p: { xs: 2.5, md: 3 },
+            minWidth: 0,
+            overflow: "hidden",
+            borderTop: "3px solid",
+            borderTopColor: "secondary.main",
+          }}
+        >
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2.5} alignItems={{ md: "stretch" }}>
+            <Stack spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+              <Stack direction="row" spacing={1.25} alignItems="center">
+                <PublicIcon color="secondary" />
+                <Typography variant="h2" color="blog.subheading">Visited places map</Typography>
+              </Stack>
+              <Typography color="text.secondary" sx={textWrapSx}>
+                A live map of places I have been, saved separately from the itineraries.
+              </Typography>
+              <Box>
+                <Button
+                  component="a"
+                  href={SKRATCH_VISITED_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="contained"
+                  color="secondary"
+                  endIcon={<OpenInNewIcon />}
+                >
+                  Open map
+                </Button>
+              </Box>
+            </Stack>
+            <Box
+              sx={{
+                flex: 1.45,
+                minWidth: 0,
+                minHeight: { xs: 320, md: 360 },
+                border: "1px solid",
+                borderColor: "divider",
+                borderRadius: 2,
+                overflow: "hidden",
+                bgcolor: "background.default",
+              }}
+            >
+              <Box
+                component="iframe"
+                src={SKRATCH_VISITED_URL}
+                title="Visited places map"
+                loading="lazy"
+                sx={{ display: "block", width: "100%", height: "100%", minHeight: { xs: 320, md: 360 }, border: 0 }}
+              />
+            </Box>
+          </Stack>
+        </Paper>
+      </AnimatedSection>
 
       {canEdit && editingId && (
         <AnimatedSection delay={60}>

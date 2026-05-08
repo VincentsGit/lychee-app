@@ -180,37 +180,43 @@ export default function Spotify({ user }) {
       )}
 
       <AnimatedSection delay={100}>
-        <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, overflow: "hidden" }}>
-          {page.playlists.length ? (
-            <Stack spacing={4}>
-              {page.playlists.map((playlist) => (
-                <Stack key={playlist.embedUrl} spacing={1.5}>
-                  <Typography variant="h2" color="blog.subheading">{decodeDisplayText(playlist.label)}</Typography>
-                  <Box
-                    component="iframe"
-                    title={`${decodeDisplayText(playlist.label)} Spotify playlist`}
-                    src={playlist.embedUrl}
-                    sx={{
-                      display: "block",
-                      width: "100%",
-                      height: { xs: 520, md: 680 },
-                      border: 0,
-                      borderRadius: 2,
-                    }}
-                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                    loading="lazy"
-                  />
-                </Stack>
-              ))}
-            </Stack>
-          ) : (
+        {page.playlists.length ? (
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" },
+              gap: 2.5,
+              alignItems: "start",
+            }}
+          >
+            {page.playlists.map((playlist) => (
+              <Paper key={playlist.embedUrl} elevation={0} sx={{ p: 1, overflow: "hidden" }}>
+                <Box
+                  component="iframe"
+                  title="Spotify playlist"
+                  src={playlist.embedUrl}
+                  sx={{
+                    display: "block",
+                    width: "100%",
+                    height: { xs: 520, md: 640 },
+                    border: 0,
+                    borderRadius: 1.5,
+                  }}
+                  allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                  loading="lazy"
+                />
+              </Paper>
+            ))}
+          </Box>
+        ) : (
+          <Paper elevation={0} sx={{ p: { xs: 2, md: 3 }, overflow: "hidden" }}>
             <Stack spacing={2} alignItems="flex-start" sx={{ py: 4 }}>
               <MusicNoteIcon color="secondary" />
               <Typography variant="h2">No playlist yet.</Typography>
               {canEdit && <Typography color="text.secondary">Paste Spotify playlist links to show them here.</Typography>}
             </Stack>
-          )}
-        </Paper>
+          </Paper>
+        )}
       </AnimatedSection>
     </Stack>
   );

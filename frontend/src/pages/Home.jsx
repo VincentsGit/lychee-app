@@ -16,7 +16,6 @@ import {
   Chip,
   Divider,
   FormControlLabel,
-  Grid,
   IconButton,
   MenuItem,
   Paper,
@@ -66,12 +65,6 @@ const defaultHome = {
       text: "This website was designed and developed by Vincent, my boyfriend, who also captured my lavender colours and cute lychee vibe.",
     },
   ],
-  cta: {
-    title: "Why I wanted this",
-    text: "I wanted somewhere that felt more mine than a normal social media page. Somewhere cosy for thoughts, photos, videos, plans, comments, and anything else I feel like saving.",
-    buttonLabel: "More about me",
-    buttonTo: "/about",
-  },
 };
 
 const iconOptions = [
@@ -98,7 +91,6 @@ function normaliseHome(data) {
     ...data,
     hero: { ...defaultHome.hero, ...(data?.hero || {}) },
     bubbles: data?.bubbles?.length ? data.bubbles : defaultHome.bubbles,
-    cta: { ...defaultHome.cta, ...(data?.cta || {}) },
   };
 }
 
@@ -203,10 +195,6 @@ export default function Home({ user }) {
     }));
   };
 
-  const updateCta = (field, value) => {
-    setDraft((current) => ({ ...current, cta: { ...current.cta, [field]: value } }));
-  };
-
   const save = async () => {
     setStatus("");
     setError("");
@@ -226,8 +214,8 @@ export default function Home({ user }) {
   };
 
   return (
-    <Stack spacing={{ xs: 6, md: 9 }}>
-      <AnimatedSection>
+    <Stack spacing={{ xs: 6, md: 8 }} sx={{ alignItems: "center" }}>
+      <AnimatedSection sx={{ width: "100%" }}>
         <Stack spacing={2.5}>
           {canEdit && (
             <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
@@ -240,57 +228,53 @@ export default function Home({ user }) {
               </Button>
             </Box>
           )}
-          <Grid container spacing={4} alignItems="center">
-            <Grid item xs={12} md={7}>
-              <Stack spacing={3}>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  {page.hero.chips.map((chip, index) => (
-                    <Chip
-                      key={`${chip.label}-${index}`}
-                      label={decodeDisplayText(chip.label)}
-                      color={chip.variant === "filled" ? "primary" : "default"}
-                      variant={chip.variant === "outlined" ? "outlined" : "filled"}
-                    />
-                  ))}
-                </Stack>
-                <Typography variant="h1" color="blog.subheading">
-                  {decodeDisplayText(page.hero.title)}
-                </Typography>
-                <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 680 }}>
-                  {decodeDisplayText(page.hero.intro)}
-                </Typography>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Button component={RouterLink} to={page.hero.primaryButton.to} variant="contained" color="secondary" endIcon={<ArrowForwardIcon />}>
-                    {decodeDisplayText(page.hero.primaryButton.label)}
-                  </Button>
-                  <Button component={RouterLink} to={page.hero.secondaryButton.to} variant="outlined">
-                    {decodeDisplayText(page.hero.secondaryButton.label)}
-                  </Button>
-                </Stack>
-              </Stack>
-            </Grid>
-            <Grid item xs={12} md={5}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: { xs: 3, md: 4 },
-                  minHeight: { xs: 360, md: 410 },
-                  display: "grid",
-                  placeItems: "center",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-              >
-                <Box component="img" src={getPandaImage(page.hero.pandaImage)} alt={decodeDisplayText(page.hero.imageAlt)} sx={{ width: "74%", maxWidth: 310, zIndex: 1 }} />
-                {page.hero.showLavender && (
-                  <Box component="img" src={lavenderGif} alt="" sx={{ position: "absolute", left: 28, top: 28, width: 72 }} />
-                )}
-                {page.hero.showFlowers && (
-                  <Box component="img" src={flowersGif} alt="" sx={{ position: "absolute", right: 22, bottom: 18, width: 112 }} />
-                )}
-              </Paper>
-            </Grid>
-          </Grid>
+          <Stack spacing={3.5} alignItems="center" sx={{ width: "100%", maxWidth: 860, mx: "auto", textAlign: "center" }}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center" useFlexGap>
+              {page.hero.chips.map((chip, index) => (
+                <Chip
+                  key={`${chip.label}-${index}`}
+                  label={decodeDisplayText(chip.label)}
+                  color={chip.variant === "filled" ? "primary" : "default"}
+                  variant={chip.variant === "outlined" ? "outlined" : "filled"}
+                />
+              ))}
+            </Stack>
+            <Typography variant="h1" color="blog.subheading">
+              {decodeDisplayText(page.hero.title)}
+            </Typography>
+            <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 680 }}>
+              {decodeDisplayText(page.hero.intro)}
+            </Typography>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="center">
+              <Button component={RouterLink} to={page.hero.primaryButton.to} variant="contained" color="secondary" endIcon={<ArrowForwardIcon />}>
+                {decodeDisplayText(page.hero.primaryButton.label)}
+              </Button>
+              <Button component={RouterLink} to={page.hero.secondaryButton.to} variant="outlined">
+                {decodeDisplayText(page.hero.secondaryButton.label)}
+              </Button>
+            </Stack>
+            <Paper
+              elevation={0}
+              sx={{
+                p: { xs: 3, md: 4 },
+                minHeight: { xs: 340, md: 380 },
+                width: "100%",
+                maxWidth: 420,
+                display: "grid",
+                placeItems: "center",
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <Box component="img" src={getPandaImage(page.hero.pandaImage)} alt={decodeDisplayText(page.hero.imageAlt)} sx={{ width: "74%", maxWidth: 310, zIndex: 1 }} />
+              {page.hero.showLavender && (
+                <Box component="img" src={lavenderGif} alt="" sx={{ position: "absolute", left: 28, top: 28, width: 72 }} />
+              )}
+              {page.hero.showFlowers && (
+                <Box component="img" src={flowersGif} alt="" sx={{ position: "absolute", right: 22, bottom: 18, width: 112 }} />
+              )}
+            </Paper>
+          </Stack>
         </Stack>
       </AnimatedSection>
 
@@ -303,7 +287,7 @@ export default function Home({ user }) {
             <Stack spacing={3}>
               <Box>
                 <Typography variant="h2" color="blog.subheading">Edit home page</Typography>
-                <Typography color="text.secondary">Update the hero, buttons, bubbles, and lower call-to-action.</Typography>
+                <Typography color="text.secondary">Update the hero, buttons, and bubbles.</Typography>
               </Box>
 
               <Stack spacing={2}>
@@ -408,18 +392,6 @@ export default function Home({ user }) {
                 ))}
               </Stack>
 
-              <Divider />
-
-              <Stack spacing={2}>
-                <Typography variant="h3">Bottom section</Typography>
-                <TextField label="Heading" value={draft.cta.title} onChange={(event) => updateCta("title", event.target.value)} />
-                <TextField label="Text" value={draft.cta.text} onChange={(event) => updateCta("text", event.target.value)} multiline minRows={3} />
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <TextField label="Button label" value={draft.cta.buttonLabel} onChange={(event) => updateCta("buttonLabel", event.target.value)} />
-                  <TextField label="Button link" value={draft.cta.buttonTo} onChange={(event) => updateCta("buttonTo", event.target.value)} />
-                </Stack>
-              </Stack>
-
               <Stack direction="row" spacing={2} justifyContent="flex-end">
                 <Button onClick={() => setEditing(false)}>Cancel</Button>
                 <Button variant="contained" startIcon={<SaveIcon />} onClick={save}>Save home page</Button>
@@ -429,9 +401,19 @@ export default function Home({ user }) {
         </AnimatedSection>
       )}
 
-      <Grid container spacing={2.5}>
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" },
+          gap: 2.5,
+          width: "100%",
+          maxWidth: 1120,
+          mx: "auto",
+          alignItems: "stretch",
+        }}
+      >
         {page.bubbles.map((item, index) => (
-          <Grid item xs={12} md={4} key={`${item.title}-${index}`}>
+          <Box key={`${item.title}-${index}`} sx={{ minWidth: 0 }}>
             <AnimatedSection delay={index * 100}>
               <Paper
                 elevation={0}
@@ -450,27 +432,10 @@ export default function Home({ user }) {
                 </Stack>
               </Paper>
             </AnimatedSection>
-          </Grid>
+          </Box>
         ))}
-      </Grid>
+      </Box>
 
-      <AnimatedSection>
-        <Paper elevation={0} sx={{ p: { xs: 3, md: 5 } }}>
-          <Grid container spacing={3} alignItems="center">
-            <Grid item xs={12} md={8}>
-              <Typography variant="h2" color="blog.subheading">{decodeDisplayText(page.cta.title)}</Typography>
-              <Typography color="text.secondary" sx={{ mt: 2 }}>
-                {decodeDisplayText(page.cta.text)}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Button component={RouterLink} to={page.cta.buttonTo} fullWidth size="large" variant="contained">
-                {decodeDisplayText(page.cta.buttonLabel)}
-              </Button>
-            </Grid>
-          </Grid>
-        </Paper>
-      </AnimatedSection>
     </Stack>
   );
 }
