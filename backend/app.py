@@ -51,7 +51,7 @@ DEFAULT_HOME_OBJECT = {
         {
             "icon": "heart",
             "title": "Made by Vincent",
-            "text": "This website was designed and developed by Vincent, my boyfriend, who also kept my lavender colours and cute lychee vibe.",
+            "text": "This website was designed and developed by Vincent, my boyfriend, who also captured my lavender colours and cute lychee vibe.",
         },
     ],
     "cta": {

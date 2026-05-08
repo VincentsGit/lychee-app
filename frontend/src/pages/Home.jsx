@@ -63,7 +63,7 @@ const defaultHome = {
     {
       icon: "heart",
       title: "Made by Vincent",
-      text: "This website was designed and developed by Vincent, my boyfriend, who also kept my lavender colours and cute lychee vibe.",
+      text: "This website was designed and developed by Vincent, my boyfriend, who also captured my lavender colours and cute lychee vibe.",
     },
   ],
   cta: {
@@ -260,7 +260,7 @@ export default function Home({ user }) {
                   {decodeDisplayText(page.hero.intro)}
                 </Typography>
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-                  <Button component={RouterLink} to={page.hero.primaryButton.to} variant="contained" endIcon={<ArrowForwardIcon />}>
+                  <Button component={RouterLink} to={page.hero.primaryButton.to} variant="contained" color="secondary" endIcon={<ArrowForwardIcon />}>
                     {decodeDisplayText(page.hero.primaryButton.label)}
                   </Button>
                   <Button component={RouterLink} to={page.hero.secondaryButton.to} variant="outlined">
@@ -274,14 +274,14 @@ export default function Home({ user }) {
                 elevation={0}
                 sx={{
                   p: { xs: 3, md: 4 },
-                  minHeight: 360,
+                  minHeight: { xs: 360, md: 410 },
                   display: "grid",
                   placeItems: "center",
                   position: "relative",
                   overflow: "hidden",
                 }}
               >
-                <Box component="img" src={getPandaImage(page.hero.pandaImage)} alt={decodeDisplayText(page.hero.imageAlt)} sx={{ width: "65%", maxWidth: 260, zIndex: 1 }} />
+                <Box component="img" src={getPandaImage(page.hero.pandaImage)} alt={decodeDisplayText(page.hero.imageAlt)} sx={{ width: "74%", maxWidth: 310, zIndex: 1 }} />
                 {page.hero.showLavender && (
                   <Box component="img" src={lavenderGif} alt="" sx={{ position: "absolute", left: 28, top: 28, width: 72 }} />
                 )}
@@ -433,11 +433,20 @@ export default function Home({ user }) {
         {page.bubbles.map((item, index) => (
           <Grid item xs={12} md={4} key={`${item.title}-${index}`}>
             <AnimatedSection delay={index * 100}>
-              <Paper elevation={0} sx={{ p: 3, height: "100%" }}>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 3,
+                  height: "100%",
+                  borderTop: "3px solid",
+                  borderTopColor: "secondary.main",
+                  boxShadow: "0 18px 52px rgba(199, 146, 255, 0.16)",
+                }}
+              >
                 <Stack spacing={2}>
                   <Box sx={{ color: "secondary.main" }}><BubbleIcon type={item.icon} /></Box>
-                  <Typography variant="h4">{decodeDisplayText(item.title)}</Typography>
-                  <Typography color="text.secondary">{decodeDisplayText(item.text)}</Typography>
+                  <Typography variant="h4" sx={(theme) => ({ fontFamily: theme.typography.monoFontFamily })}>{decodeDisplayText(item.title)}</Typography>
+                  <Typography color="text.secondary" sx={{ fontSize: "1.06rem", lineHeight: 1.68 }}>{decodeDisplayText(item.text)}</Typography>
                 </Stack>
               </Paper>
             </AnimatedSection>
