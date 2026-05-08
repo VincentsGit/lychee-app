@@ -30,7 +30,7 @@ DEFAULT_HOME_OBJECT = {
         ],
         "title": "Welcome to my website!",
         "intro": "This is my little corner of the internet where I can write about whatever I want, keep memories in one place, and share updates without everything disappearing into social media.",
-        "primaryButton": {"label": "Read my blog", "to": "/blog"},
+        "primaryButton": {"label": "Read the blog", "to": "/blog"},
         "secondaryButton": {"label": "Leave a comment", "to": "/register"},
         "pandaImage": "bounce",
         "imageAlt": "Bouncing panda",

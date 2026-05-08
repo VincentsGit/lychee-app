@@ -41,7 +41,7 @@ const defaultHome = {
     ],
     title: "Welcome to my website!",
     intro: "This is my little corner of the internet where I can write about whatever I want, keep memories in one place, and share updates without everything disappearing into social media.",
-    primaryButton: { label: "Read my blog", to: "/blog" },
+    primaryButton: { label: "Read the blog", to: "/blog" },
     secondaryButton: { label: "Leave a comment", to: "/register" },
     pandaImage: "bounce",
     imageAlt: "Bouncing panda",
@@ -214,11 +214,22 @@ export default function Home({ user }) {
   };
 
   return (
-    <Stack spacing={{ xs: 6, md: 8 }} sx={{ alignItems: "center" }}>
-      <AnimatedSection sx={{ width: "100%" }}>
-        <Stack spacing={2.5}>
+    <Stack
+      spacing={{ xs: 6, md: 8 }}
+      sx={{
+        alignItems: "center",
+        boxSizing: "border-box",
+        width: "100vw",
+        maxWidth: "100vw",
+        mx: "calc(50% - 50vw)",
+        px: { xs: 2, sm: 4, lg: 6 },
+        overflowX: "clip",
+      }}
+    >
+      <AnimatedSection sx={{ width: "100%", display: "flex", justifyContent: "center" }}>
+        <Stack spacing={2.5} sx={{ width: "100%", alignItems: "center" }}>
           {canEdit && (
-            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+            <Box sx={{ width: "100%", maxWidth: 1120, display: "flex", justifyContent: "flex-end" }}>
               <Button
                 variant={editing ? "outlined" : "contained"}
                 startIcon={editing ? <CloseIcon /> : <EditIcon />}
