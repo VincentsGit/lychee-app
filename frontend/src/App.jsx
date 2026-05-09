@@ -43,6 +43,7 @@ const Travel = lazy(() => import("./pages/Travel"));
 const User = lazy(() => import("./pages/User"));
 
 function AppShell() {
+  const sidebarWidth = 280;
   const [mode, setMode] = useState("dark");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState(undefined);
@@ -141,12 +142,17 @@ function AppShell() {
 
   const drawer = (
     <Box sx={{ p: 2.5, height: "100%", display: "flex", flexDirection: "column", gap: 3 }}>
-      <Stack direction="row" spacing={1.5} alignItems="center">
-        <Box component="img" src={PandaIcon} alt="lychee" sx={{ width: 42, height: 42 }} />
-        <Box>
-          <Typography variant="h5" lineHeight={1}>lychee</Typography>
-          <Typography variant="caption" color="text.secondary">my little site</Typography>
-        </Box>
+      <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
+        <MUILink component={RouterLink} to="/" underline="none" color="inherit" onClick={() => setMobileOpen(false)} sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
+          <Box component="img" src={PandaIcon} alt="lychee" sx={{ width: 42, height: 42, flexShrink: 0 }} />
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h5" lineHeight={1}>lychee</Typography>
+            <Typography variant="caption" color="text.secondary">my little site</Typography>
+          </Box>
+        </MUILink>
+        <IconButton onClick={() => setMode((prev) => (prev === "light" ? "dark" : "light"))} aria-label="Toggle colour mode">
+          {mode === "light" ? <DarkModeIcon /> : <LightModeIcon />}
+        </IconButton>
       </Stack>
       {nav}
       <Box sx={{ flex: 1 }} />
@@ -158,51 +164,39 @@ function AppShell() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Box sx={{ minHeight: "100vh" }}>
-        <AppBar position="sticky" color="transparent" elevation={0} sx={{ backdropFilter: "blur(18px)" }}>
+        <AppBar position="sticky" color="transparent" elevation={0} sx={{ display: { md: "none" }, backdropFilter: "blur(18px)" }}>
           <Toolbar sx={{ gap: 2, px: { xs: 2, md: 4 } }}>
-            <IconButton onClick={() => setMobileOpen(true)} sx={{ display: { md: "none" } }}>
+            <IconButton onClick={() => setMobileOpen(true)}>
               <MenuIcon />
             </IconButton>
             <MUILink component={RouterLink} to="/" underline="none" color="inherit" sx={{ display: "flex", alignItems: "center", gap: 1.2 }}>
               <Box component="img" src={PandaIcon} alt="" sx={{ width: 34, height: 34 }} />
               <Typography variant="h4" sx={{ letterSpacing: 0 }}>lychee</Typography>
             </MUILink>
-            <Stack direction="row" spacing={0.5} sx={{ ml: 3, display: { xs: "none", md: "flex" } }}>
-              {navItems.map((item) => (
-                <Button key={item.to} component={RouterLink} to={item.to}>{item.label}</Button>
-              ))}
-            </Stack>
             <Box sx={{ flex: 1 }} />
-            {user?.username === "runitrench" && (
-              <Button component={RouterLink} to="/create" startIcon={<CreateIcon />} sx={{ display: { xs: "none", md: "inline-flex" } }}>
-                Create
-              </Button>
-            )}
             <IconButton onClick={() => setMode((prev) => (prev === "light" ? "dark" : "light"))}>
               {mode === "light" ? <DarkModeIcon /> : <LightModeIcon />}
             </IconButton>
-            <Box sx={{ display: { xs: "none", md: "block" } }}>
-              {user ? (
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <Button component={RouterLink} to={`/users/${user.id}`} startIcon={<UserAvatar user={user} size={30} />}>
-                    {decodeDisplayText(user.displayName || user.username)}
-                  </Button>
-                  <Button component={RouterLink} to="/settings" startIcon={<SettingsIcon />}>
-                    Settings
-                  </Button>
-                  <Button onClick={logout} startIcon={<LogoutIcon />}>
-                    Logout
-                  </Button>
-                </Stack>
-              ) : (
-                <Stack direction="row" spacing={1}>
-                  <Button component={RouterLink} to="/login">Login</Button>
-                  <Button component={RouterLink} to="/register" variant="contained">Register</Button>
-                </Stack>
-              )}
-            </Box>
           </Toolbar>
         </AppBar>
+
+        <Box
+          component="aside"
+          sx={{
+            display: { xs: "none", md: "block" },
+            position: "fixed",
+            inset: "0 auto 0 0",
+            width: sidebarWidth,
+            borderRight: "1px solid",
+            borderColor: "divider",
+            bgcolor: "background.paper",
+            backdropFilter: "blur(18px)",
+            zIndex: (currentTheme) => currentTheme.zIndex.drawer,
+            overflowY: "auto",
+          }}
+        >
+          {drawer}
+        </Box>
 
         <Drawer open={mobileOpen} onClose={() => setMobileOpen(false)} ModalProps={{ keepMounted: true }}>
           <Box sx={{ width: 290, height: "100%" }}>
@@ -213,28 +207,30 @@ function AppShell() {
           </Box>
         </Drawer>
 
-        <Container maxWidth="lg" sx={{ py: { xs: 3, md: 6 } }}>
-          <Suspense fallback={<Typography color="text.secondary">Loading...</Typography>}>
-            <Routes>
-              <Route path="/" element={<Home user={user} />} />
-              <Route path="/about" element={<About user={user} />} />
-              <Route path="/socials" element={<Socials />} />
-              <Route path="/blog" element={<Blog user={user} />} />
-              <Route path="/travel" element={<Travel user={user} />} />
-              <Route path="/travel/:planId" element={<Travel user={user} />} />
-              <Route path="/spotify" element={<Spotify user={user} />} />
-              <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
-              <Route path="/edit/:postId" element={<EditPost />} />
-              <Route path="/create" element={<Create />} />
-              <Route path="/login" element={<Login setUser={setUser} />} />
-              <Route path="/register" element={<Register setUser={setUser} />} />
-              <Route path="/settings" element={<Settings user={user} refreshUser={refreshUser} />} />
-              <Route path="/games" element={<SteamSavings />} />
-              <Route path="/steam-savings" element={<SteamSavings />} />
-              <Route path="/users/:userId" element={<User />} />
-            </Routes>
-          </Suspense>
-        </Container>
+        <Box component="main" sx={{ minHeight: "100vh", ml: { md: `${sidebarWidth}px` } }}>
+          <Container maxWidth="xl" sx={{ py: { xs: 3, md: 6 } }}>
+            <Suspense fallback={<Typography color="text.secondary">Loading...</Typography>}>
+              <Routes>
+                <Route path="/" element={<Home user={user} />} />
+                <Route path="/about" element={<About user={user} />} />
+                <Route path="/socials" element={<Socials />} />
+                <Route path="/blog" element={<Blog user={user} />} />
+                <Route path="/travel" element={<Travel user={user} />} />
+                <Route path="/travel/:planId" element={<Travel user={user} />} />
+                <Route path="/spotify" element={<Spotify user={user} />} />
+                <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
+                <Route path="/edit/:postId" element={<EditPost />} />
+                <Route path="/create" element={<Create />} />
+                <Route path="/login" element={<Login setUser={setUser} />} />
+                <Route path="/register" element={<Register setUser={setUser} />} />
+                <Route path="/settings" element={<Settings user={user} refreshUser={refreshUser} />} />
+                <Route path="/games" element={<SteamSavings />} />
+                <Route path="/steam-savings" element={<SteamSavings />} />
+                <Route path="/users/:userId" element={<User />} />
+              </Routes>
+            </Suspense>
+          </Container>
+        </Box>
       </Box>
     </ThemeProvider>
   );

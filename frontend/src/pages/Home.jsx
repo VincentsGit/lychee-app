@@ -217,18 +217,18 @@ export default function Home({ user }) {
     <Stack
       spacing={{ xs: 6, md: 8 }}
       sx={{
-        alignItems: "center",
+        alignItems: "stretch",
         boxSizing: "border-box",
         width: "100%",
-        maxWidth: 1120,
+        maxWidth: 1480,
         mx: "auto",
         overflowX: "clip",
       }}
     >
-      <AnimatedSection sx={{ width: "100%", display: "flex", justifyContent: "center" }}>
-        <Stack spacing={2.5} sx={{ width: "100%", alignItems: "center" }}>
+      <AnimatedSection sx={{ width: "100%" }}>
+        <Stack spacing={3} sx={{ width: "100%" }}>
           {canEdit && (
-            <Box sx={{ width: "100%", maxWidth: 1120, display: "flex", justifyContent: "flex-end" }}>
+            <Box sx={{ width: "100%", display: "flex", justifyContent: "flex-end" }}>
               <Button
                 variant={editing ? "outlined" : "contained"}
                 startIcon={editing ? <CloseIcon /> : <EditIcon />}
@@ -238,53 +238,107 @@ export default function Home({ user }) {
               </Button>
             </Box>
           )}
-          <Stack spacing={3.5} alignItems="center" sx={{ width: "100%", maxWidth: 860, mx: "auto", textAlign: "center" }}>
-            <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent="center" useFlexGap>
-              {page.hero.chips.map((chip, index) => (
-                <Chip
-                  key={`${chip.label}-${index}`}
-                  label={decodeDisplayText(chip.label)}
-                  color={chip.variant === "filled" ? "primary" : "default"}
-                  variant={chip.variant === "outlined" ? "outlined" : "filled"}
-                />
-              ))}
-            </Stack>
-            <Typography variant="h1" color="blog.subheading">
-              {decodeDisplayText(page.hero.title)}
-            </Typography>
-            <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 680 }}>
-              {decodeDisplayText(page.hero.intro)}
-            </Typography>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="center">
-              <Button component={RouterLink} to={page.hero.primaryButton.to} variant="contained" color="secondary" endIcon={<ArrowForwardIcon />}>
-                {decodeDisplayText(page.hero.primaryButton.label)}
-              </Button>
-              <Button component={RouterLink} to={page.hero.secondaryButton.to} variant="outlined">
-                {decodeDisplayText(page.hero.secondaryButton.label)}
-              </Button>
-            </Stack>
-            <Paper
-              elevation={0}
+
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.25fr) minmax(300px, 0.75fr)" },
+              gap: { xs: 4, lg: 5 },
+              alignItems: "start",
+              width: "100%",
+            }}
+          >
+            <Stack
+              spacing={3.5}
+              alignItems={{ xs: "center", lg: "flex-start" }}
               sx={{
-                p: { xs: 3, md: 4 },
-                minHeight: { xs: 340, md: 380 },
                 width: "100%",
-                maxWidth: 420,
-                display: "grid",
-                placeItems: "center",
-                position: "relative",
-                overflow: "hidden",
+                maxWidth: { xs: 860, lg: 700 },
+                mx: { xs: "auto", lg: 0 },
+                textAlign: { xs: "center", lg: "left" },
+                minWidth: 0,
               }}
             >
-              <Box component="img" src={getPandaImage(page.hero.pandaImage)} alt={decodeDisplayText(page.hero.imageAlt)} sx={{ width: "74%", maxWidth: 310, zIndex: 1 }} />
-              {page.hero.showLavender && (
-                <Box component="img" src={lavenderGif} alt="" sx={{ position: "absolute", left: 28, top: 28, width: 72 }} />
-              )}
-              {page.hero.showFlowers && (
-                <Box component="img" src={flowersGif} alt="" sx={{ position: "absolute", right: 22, bottom: 18, width: 112 }} />
-              )}
-            </Paper>
-          </Stack>
+              <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent={{ xs: "center", lg: "flex-start" }} useFlexGap>
+                {page.hero.chips.map((chip, index) => (
+                  <Chip
+                    key={`${chip.label}-${index}`}
+                    label={decodeDisplayText(chip.label)}
+                    color={chip.variant === "filled" ? "primary" : "default"}
+                    variant={chip.variant === "outlined" ? "outlined" : "filled"}
+                  />
+                ))}
+              </Stack>
+              <Typography variant="h1" color="blog.subheading">
+                {decodeDisplayText(page.hero.title)}
+              </Typography>
+              <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 680 }}>
+                {decodeDisplayText(page.hero.intro)}
+              </Typography>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent={{ xs: "center", lg: "flex-start" }}>
+                <Button component={RouterLink} to={page.hero.primaryButton.to} variant="contained" color="secondary" endIcon={<ArrowForwardIcon />}>
+                  {decodeDisplayText(page.hero.primaryButton.label)}
+                </Button>
+                <Button component={RouterLink} to={page.hero.secondaryButton.to} variant="outlined">
+                  {decodeDisplayText(page.hero.secondaryButton.label)}
+                </Button>
+              </Stack>
+              <Paper
+                elevation={0}
+                sx={{
+                  p: { xs: 3, md: 4 },
+                  minHeight: { xs: 320, md: 390 },
+                  width: "100%",
+                  maxWidth: { xs: 420, lg: 500 },
+                  alignSelf: { xs: "center", lg: "flex-start" },
+                  display: "grid",
+                  placeItems: "center",
+                  position: "relative",
+                  overflow: "hidden",
+                }}
+              >
+                <Box component="img" src={getPandaImage(page.hero.pandaImage)} alt={decodeDisplayText(page.hero.imageAlt)} sx={{ width: "74%", maxWidth: 340, zIndex: 1 }} />
+                {page.hero.showLavender && (
+                  <Box component="img" src={lavenderGif} alt="" sx={{ position: "absolute", left: 28, top: 28, width: 72 }} />
+                )}
+                {page.hero.showFlowers && (
+                  <Box component="img" src={flowersGif} alt="" sx={{ position: "absolute", right: 22, bottom: 18, width: 112 }} />
+                )}
+              </Paper>
+            </Stack>
+
+            <Stack
+              spacing={2.5}
+              sx={{
+                width: "100%",
+                maxWidth: { xs: 640, lg: 390 },
+                mx: { xs: "auto", lg: 0 },
+                justifySelf: { xs: "center", lg: "end" },
+                minWidth: 0,
+              }}
+            >
+              {page.bubbles.map((item, index) => (
+                <AnimatedSection key={`${item.title}-${index}`} delay={120 + index * 90} sx={{ width: "100%" }}>
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 3,
+                      width: "100%",
+                      borderTop: "3px solid",
+                      borderTopColor: "secondary.main",
+                      boxShadow: "0 18px 52px rgba(199, 146, 255, 0.16)",
+                    }}
+                  >
+                    <Stack spacing={2}>
+                      <Box sx={{ color: "secondary.main" }}><BubbleIcon type={item.icon} /></Box>
+                      <Typography variant="h4" sx={(theme) => ({ fontFamily: theme.typography.monoFontFamily })}>{decodeDisplayText(item.title)}</Typography>
+                      <Typography color="text.secondary" sx={{ fontSize: "1.06rem", lineHeight: 1.68 }}>{decodeDisplayText(item.text)}</Typography>
+                    </Stack>
+                  </Paper>
+                </AnimatedSection>
+              ))}
+            </Stack>
+          </Box>
         </Stack>
       </AnimatedSection>
 
@@ -370,7 +424,7 @@ export default function Home({ user }) {
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ sm: "center" }} justifyContent="space-between">
                   <Box>
                     <Typography variant="h3">Bubbles</Typography>
-                    <Typography color="text.secondary">Each bubble becomes one card under the hero.</Typography>
+                    <Typography color="text.secondary">Each bubble appears in the right-side column on desktop.</Typography>
                   </Box>
                   <Button startIcon={<AddIcon />} onClick={addBubble} disabled={draft.bubbles.length >= 6}>
                     Add bubble
@@ -410,41 +464,6 @@ export default function Home({ user }) {
           </Paper>
         </AnimatedSection>
       )}
-
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: { xs: "1fr", md: "repeat(3, minmax(0, 1fr))" },
-          gap: 2.5,
-          width: "100%",
-          maxWidth: 1120,
-          mx: "auto",
-          alignItems: "stretch",
-        }}
-      >
-        {page.bubbles.map((item, index) => (
-          <Box key={`${item.title}-${index}`} sx={{ minWidth: 0 }}>
-            <AnimatedSection delay={index * 100}>
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 3,
-                  height: "100%",
-                  borderTop: "3px solid",
-                  borderTopColor: "secondary.main",
-                  boxShadow: "0 18px 52px rgba(199, 146, 255, 0.16)",
-                }}
-              >
-                <Stack spacing={2}>
-                  <Box sx={{ color: "secondary.main" }}><BubbleIcon type={item.icon} /></Box>
-                  <Typography variant="h4" sx={(theme) => ({ fontFamily: theme.typography.monoFontFamily })}>{decodeDisplayText(item.title)}</Typography>
-                  <Typography color="text.secondary" sx={{ fontSize: "1.06rem", lineHeight: 1.68 }}>{decodeDisplayText(item.text)}</Typography>
-                </Stack>
-              </Paper>
-            </AnimatedSection>
-          </Box>
-        ))}
-      </Box>
 
     </Stack>
   );
