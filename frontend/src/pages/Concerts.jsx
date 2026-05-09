@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AddIcon from "@mui/icons-material/Add";
 import CloseIcon from "@mui/icons-material/Close";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -243,6 +243,11 @@ export default function Concerts({ user }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const editorRef = useRef(null);
+
+  const scrollToEditor = () => {
+    window.setTimeout(() => editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+  };
 
   const loadConcerts = () => {
     setLoading(true);
@@ -290,8 +295,9 @@ export default function Concerts({ user }) {
   const editEvent = (event) => {
     setEditingEventId(event.id);
     setEventDraft(eventToDraft(event));
-    setStatus("");
+    setStatus(`Editing ${decodeDisplayText(event.artist)}. Make changes in the form above, then press Save concert.`);
     setError("");
+    scrollToEditor();
   };
 
   const deleteEvent = async (event) => {
@@ -332,8 +338,9 @@ export default function Concerts({ user }) {
   const editWishlist = (item) => {
     setEditingWishlistId(item.id);
     setWishlistDraft({ artist: decodeDisplayText(item.artist || "") });
-    setStatus("");
+    setStatus(`Editing ${decodeDisplayText(item.artist)}. Save it in the wishlist field above.`);
     setError("");
+    scrollToEditor();
   };
 
   const deleteWishlist = async (item) => {
@@ -383,6 +390,11 @@ export default function Concerts({ user }) {
                 A little tracker for past shows, upcoming concerts, and artists Runi wants to see.
               </Typography>
             </Box>
+            {canEdit && (
+              <Button variant="contained" startIcon={<EditIcon />} onClick={scrollToEditor} sx={{ alignSelf: "flex-start" }}>
+                Edit concerts
+              </Button>
+            )}
           </Stack>
         </Paper>
       </AnimatedSection>
@@ -395,8 +407,9 @@ export default function Concerts({ user }) {
       )}
 
       {canEdit && (
-        <AnimatedSection delay={40} sx={{ width: "100%", maxWidth: 980 }}>
-          <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 }, borderTop: "3px solid", borderTopColor: "secondary.main" }}>
+        <Box ref={editorRef} sx={{ width: "100%", maxWidth: 980, scrollMarginTop: { xs: 88, md: 32 } }}>
+          <AnimatedSection delay={40}>
+            <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 }, borderTop: "3px solid", borderTopColor: "secondary.main" }}>
             <Stack spacing={3}>
               <Box>
                 <Typography variant="h2" color="blog.subheading">Edit concert tracker</Typography>
@@ -413,8 +426,9 @@ export default function Concerts({ user }) {
                 </Stack>
               </Box>
             </Stack>
-          </Paper>
-        </AnimatedSection>
+            </Paper>
+          </AnimatedSection>
+        </Box>
       )}
 
       <AnimatedSection delay={60} sx={{ width: "100%", maxWidth: 820 }}>
