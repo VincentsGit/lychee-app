@@ -62,7 +62,7 @@ function SystemClock() {
         color: "secondary.main",
         bgcolor: "rgba(255, 204, 131, 0.08)",
         fontFamily: (currentTheme) => currentTheme.typography.monoFontFamily,
-        fontSize: { xs: "0.76rem", md: "0.8rem", lg: "0.86rem" },
+        fontSize: { xs: "0.72rem", md: "0.74rem", lg: "0.78rem" },
         fontWeight: 800,
         letterSpacing: "0.08em",
         lineHeight: 1,
@@ -77,6 +77,7 @@ function SystemClock() {
 const About = lazy(() => import("./pages/About"));
 const Blog = lazy(() => import("./pages/Blog"));
 const BlogPost = lazy(() => import("./pages/BlogPost"));
+const Concerts = lazy(() => import("./pages/Concerts"));
 const Create = lazy(() => import("./pages/Create"));
 const EditPost = lazy(() => import("./pages/EditPost"));
 const Gallery = lazy(() => import("./pages/Gallery"));
@@ -122,6 +123,7 @@ function AppShell() {
     { label: "Home", to: "/" },
     { label: "About", to: "/about" },
     { label: "Blog", to: "/blog" },
+    { label: "Concerts", to: "/concerts" },
     { label: "Travel", to: "/travel" },
     { label: "Gallery", to: "/gallery" },
     { label: "Watchlist", to: "/watchlist" },
@@ -134,16 +136,16 @@ function AppShell() {
   const sidebarButtonSx = {
     justifyContent: "flex-start",
     width: "100%",
-    px: 2,
-    py: { xs: 0.95, md: 1.08, lg: 1.15 },
-    minHeight: { xs: 42, md: 46, lg: 48 },
-    fontSize: { xs: "0.9rem", md: "0.98rem", lg: "1.05rem" },
-    letterSpacing: "0.025em",
-    lineHeight: 1.2,
+    px: { xs: 1.6, md: 1.45, lg: 1.55 },
+    py: { xs: 0.72, md: 0.68, lg: 0.72 },
+    minHeight: { xs: 36, md: 36, lg: 38 },
+    fontSize: { xs: "0.84rem", md: "0.87rem", lg: "0.92rem" },
+    letterSpacing: "0.015em",
+    lineHeight: 1.12,
   };
 
   const nav = (
-    <Stack spacing={{ xs: 1, md: 1.05 }}>
+    <Stack spacing={{ xs: 0.55, md: 0.45 }}>
       {navItems.map((item) => (
         <Button
           key={item.to}
@@ -170,7 +172,7 @@ function AppShell() {
   );
 
   const account = user ? (
-    <Stack spacing={{ xs: 1, md: 1.05 }}>
+    <Stack spacing={{ xs: 0.55, md: 0.45 }}>
       <Button
         component={RouterLink}
         to={`/users/${user.id}`}
@@ -194,7 +196,7 @@ function AppShell() {
       </Button>
     </Stack>
   ) : (
-    <Stack spacing={{ xs: 1, md: 1.05 }}>
+    <Stack spacing={{ xs: 0.55, md: 0.45 }}>
       <Button component={RouterLink} to="/login" onClick={() => setMobileOpen(false)} sx={sidebarButtonSx}>
         Login
       </Button>
@@ -205,7 +207,7 @@ function AppShell() {
   );
 
   const drawer = (
-    <Box sx={{ p: { xs: 2.5, md: 2.25 }, height: "100%", display: "flex", flexDirection: "column", gap: { xs: 3, md: 2.6 } }}>
+    <Box sx={{ p: { xs: 2.2, md: 1.55, lg: 1.75 }, height: "100%", display: "flex", flexDirection: "column", gap: { xs: 2, md: 1.35, lg: 1.55 } }}>
       <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
         <MUILink component={RouterLink} to="/" underline="none" color="inherit" onClick={() => setMobileOpen(false)} sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
           <Box component="img" src={PandaIcon} alt="lychee" sx={{ width: 42, height: 42, flexShrink: 0 }} />
@@ -257,7 +259,7 @@ function AppShell() {
             bgcolor: "background.paper",
             backdropFilter: "blur(18px)",
             zIndex: (currentTheme) => currentTheme.zIndex.drawer,
-            overflowY: "auto",
+            overflowY: "hidden",
           }}
         >
           {drawer}
@@ -278,8 +280,9 @@ function AppShell() {
               <Routes>
                 <Route path="/" element={<Home user={user} />} />
                 <Route path="/about" element={<About user={user} />} />
-                <Route path="/socials" element={<Socials />} />
+                <Route path="/socials" element={<Socials user={user} />} />
                 <Route path="/blog" element={<Blog user={user} />} />
+                <Route path="/concerts" element={<Concerts user={user} />} />
                 <Route path="/travel" element={<Travel user={user} />} />
                 <Route path="/travel/:planId" element={<Travel user={user} />} />
                 <Route path="/gallery" element={<Gallery user={user} />} />

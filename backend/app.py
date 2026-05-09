@@ -22,6 +22,33 @@ DEFAULT_SPOTIFY = json.dumps({
     "title": "Spotify",
     "playlists": [],
 })
+DEFAULT_SOCIALS_OBJECT = {
+    "title": "Socials",
+    "subtitle": "Follow me on my socials!",
+    "links": [
+        {"label": "X", "href": "https://x.com/runitrench", "icon": "x"},
+        {"label": "Instagram", "href": "https://www.instagram.com/runitrench", "icon": "instagram"},
+        {"label": "TikTok", "href": "https://www.tiktok.com/@runitrench", "icon": "tiktok"},
+        {"label": "Twitch", "href": "https://www.twitch.tv/runitrench", "icon": "twitch"},
+        {"label": "YouTube", "href": "https://www.youtube.com/@runitrench", "icon": "youtube"},
+    ],
+}
+DEFAULT_SOCIALS = json.dumps(DEFAULT_SOCIALS_OBJECT)
+DEFAULT_CONCERT_EVENTS = [
+    {"artist": "Laufey", "city": "Barcelona", "event_date": "", "date_note": "Jul 24", "openers": "", "status": "cancelled"},
+    {"artist": "Tate McRae", "city": "Barcelona", "event_date": "2024-05-20", "date_note": "", "openers": "charlieonafriday", "status": "attended"},
+    {"artist": "Olivia Rodrigo", "city": "Barcelona", "event_date": "2024-06-18", "date_note": "", "openers": "Remi Wolf", "status": "attended"},
+    {"artist": "Cigarettes After Sex", "city": "Vienna", "event_date": "2024-11-03", "date_note": "", "openers": "", "status": "attended"},
+    {"artist": "Wave to Earth", "city": "Berlin", "event_date": "2025-05-04", "date_note": "", "openers": "", "status": "attended"},
+    {"artist": "Billie Eilish", "city": "Barcelona", "event_date": "2025-06-15", "date_note": "", "openers": "Tom Odell", "status": "attended"},
+    {"artist": "Laufey", "city": "Barcelona", "event_date": "2026-03-22", "date_note": "", "openers": "", "status": "attended"},
+    {"artist": "The Neighbourhood", "city": "Zurich", "event_date": "2026-05-05", "date_note": "", "openers": "Night Tapes · Noise Dept", "status": "attended"},
+    {"artist": "Twice", "city": "Barcelona", "event_date": "2026-05-12", "date_note": "", "openers": "", "status": "upcoming"},
+    {"artist": "Madison Beer", "city": "Barcelona", "event_date": "2026-05-26", "date_note": "", "openers": "Isabel LaRosa", "status": "upcoming"},
+    {"artist": "The Weeknd", "city": "Barcelona", "event_date": "2026-09-01", "date_note": "", "openers": "Playboi Carti", "status": "upcoming"},
+    {"artist": "Joji", "city": "Milan", "event_date": "2026-09-03", "date_note": "", "openers": "Tommy Richman", "status": "upcoming"},
+]
+DEFAULT_CONCERT_WISHLIST = ["Keshi", "The Marías", "Clairo", "Chase Atlantic", "Lana Del Rey"]
 DEFAULT_HOME_OBJECT = {
     "hero": {
         "chips": [
@@ -222,6 +249,42 @@ def migrate_travel_posts(db):
             )
 
 
+
+def seed_default_concerts(db):
+    event_count = db.execute("SELECT COUNT(*) AS count FROM concert_events").fetchone()["count"]
+    if event_count == 0:
+        now = datetime.now()
+        for index, event in enumerate(DEFAULT_CONCERT_EVENTS):
+            db.execute(
+                """
+                INSERT INTO concert_events (artist, city, event_date, date_note, openers, status, sort_order, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event["artist"],
+                    event["city"],
+                    event["event_date"],
+                    event["date_note"],
+                    event["openers"],
+                    event["status"],
+                    index,
+                    now,
+                    now,
+                ),
+            )
+
+    wishlist_count = db.execute("SELECT COUNT(*) AS count FROM concert_wishlist").fetchone()["count"]
+    if wishlist_count == 0:
+        now = datetime.now()
+        for index, artist in enumerate(DEFAULT_CONCERT_WISHLIST):
+            db.execute(
+                """
+                INSERT INTO concert_wishlist (artist, sort_order, created_at, updated_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (artist, index, now, now),
+            )
+
 def init_db():
     db = get_db()
     db.execute(
@@ -371,6 +434,55 @@ def init_db():
             db.execute(statement[1])
     db.execute(
         """
+        CREATE TABLE IF NOT EXISTS concert_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            artist TEXT NOT NULL,
+            city TEXT DEFAULT '',
+            event_date TEXT DEFAULT '',
+            date_note TEXT DEFAULT '',
+            openers TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'upcoming',
+            sort_order INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    for statement in [
+        ("artist", "ALTER TABLE concert_events ADD COLUMN artist TEXT NOT NULL DEFAULT ''"),
+        ("city", "ALTER TABLE concert_events ADD COLUMN city TEXT DEFAULT ''"),
+        ("event_date", "ALTER TABLE concert_events ADD COLUMN event_date TEXT DEFAULT ''"),
+        ("date_note", "ALTER TABLE concert_events ADD COLUMN date_note TEXT DEFAULT ''"),
+        ("openers", "ALTER TABLE concert_events ADD COLUMN openers TEXT DEFAULT ''"),
+        ("status", "ALTER TABLE concert_events ADD COLUMN status TEXT NOT NULL DEFAULT 'upcoming'"),
+        ("sort_order", "ALTER TABLE concert_events ADD COLUMN sort_order INTEGER DEFAULT 0"),
+        ("created_at", "ALTER TABLE concert_events ADD COLUMN created_at DATETIME"),
+        ("updated_at", "ALTER TABLE concert_events ADD COLUMN updated_at DATETIME"),
+    ]:
+        if not column_exists(db, "concert_events", statement[0]):
+            db.execute(statement[1])
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS concert_wishlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            artist TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    for statement in [
+        ("artist", "ALTER TABLE concert_wishlist ADD COLUMN artist TEXT NOT NULL DEFAULT ''"),
+        ("sort_order", "ALTER TABLE concert_wishlist ADD COLUMN sort_order INTEGER DEFAULT 0"),
+        ("created_at", "ALTER TABLE concert_wishlist ADD COLUMN created_at DATETIME"),
+        ("updated_at", "ALTER TABLE concert_wishlist ADD COLUMN updated_at DATETIME"),
+    ]:
+        if not column_exists(db, "concert_wishlist", statement[0]):
+            db.execute(statement[1])
+    db.execute(
+        """
         CREATE TABLE IF NOT EXISTS watchlist_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             media_type TEXT NOT NULL DEFAULT 'movie',
@@ -412,17 +524,22 @@ def init_db():
     db.execute("UPDATE travel_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
     db.execute("UPDATE watchlist_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)")
     db.execute("UPDATE gallery_photos SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)")
+    db.execute("UPDATE concert_events SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP), status = COALESCE(NULLIF(status, ''), 'upcoming')")
+    db.execute("UPDATE concert_wishlist SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)")
     for statement in [
         "CREATE INDEX IF NOT EXISTS idx_posts_category_created ON posts(category, created_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_comments_post_created ON comments(post_id, created_at ASC)",
         "CREATE INDEX IF NOT EXISTS idx_travel_items_plan_order ON travel_items(plan_id, sort_order ASC, id ASC)",
         "CREATE INDEX IF NOT EXISTS idx_watchlist_status_updated ON watchlist_items(is_watched ASC, updated_at DESC, id DESC)",
         "CREATE INDEX IF NOT EXISTS idx_gallery_created ON gallery_photos(created_at DESC, id DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_concert_events_status_order ON concert_events(status, sort_order ASC, id ASC)",
+        "CREATE INDEX IF NOT EXISTS idx_concert_wishlist_order ON concert_wishlist(sort_order ASC, id ASC)",
         "CREATE INDEX IF NOT EXISTS idx_cookies_value ON cookies(cookie_value)",
         "CREATE INDEX IF NOT EXISTS idx_cookies_created ON cookies(created_at)",
     ]:
         db.execute(statement)
     migrate_travel_posts(db)
+    seed_default_concerts(db)
     db.execute(
         """
         INSERT OR IGNORE INTO pages (slug, title, content)
@@ -443,6 +560,13 @@ def init_db():
         VALUES ('spotify', 'Spotify', ?)
         """,
         (DEFAULT_SPOTIFY,),
+    )
+    db.execute(
+        """
+        INSERT OR IGNORE INTO pages (slug, title, content)
+        VALUES ('socials', 'Socials', ?)
+        """,
+        (DEFAULT_SOCIALS,),
     )
     db.execute(
         "UPDATE pages SET content = ? WHERE slug = 'about' AND content = ?",
@@ -590,6 +714,35 @@ def spotify_embed_from_value(value):
     embed_url = f"https://open.spotify.com/embed/playlist/{playlist_id}?utm_source=generator"
     return playlist_url, embed_url
 
+
+
+VALID_SOCIAL_ICONS = {"x", "instagram", "tiktok", "twitch", "youtube", "link"}
+
+
+def normalise_socials_payload(data):
+    title = (data.get("title") or "Socials").strip()[:80] or "Socials"
+    subtitle = (data.get("subtitle") or "").strip()[:240]
+    links = []
+    for index, item in enumerate(data.get("links") or []):
+        if not isinstance(item, dict):
+            continue
+        label = (item.get("label") or "").strip()[:80]
+        href = (item.get("href") or "").strip()[:600]
+        icon = (item.get("icon") or "link").strip().lower()
+        if icon not in VALID_SOCIAL_ICONS:
+            icon = "link"
+        if not label or not href:
+            continue
+        links.append({"label": label, "href": href, "icon": icon, "sortOrder": len(links)})
+    return {"title": title, "subtitle": subtitle, "links": links}
+
+
+def socials_payload_from_content(content):
+    try:
+        payload = json.loads(content or "{}")
+    except json.JSONDecodeError:
+        payload = DEFAULT_SOCIALS_OBJECT
+    return normalise_socials_payload(payload if isinstance(payload, dict) else DEFAULT_SOCIALS_OBJECT)
 
 def normalise_spotify_playlist(item, index):
     label = (item.get("label") or item.get("title") or f"Playlist {index + 1}").strip()[:80]
@@ -1267,6 +1420,48 @@ def delete_user_by_id(user_id):
     return user, None
 
 
+
+def concert_event_payload(event):
+    return {
+        "id": event["id"],
+        "artist": event["artist"],
+        "city": event["city"] or "",
+        "eventDate": event["event_date"] or "",
+        "dateNote": event["date_note"] or "",
+        "openers": event["openers"] or "",
+        "status": event["status"] or "upcoming",
+        "sortOrder": event["sort_order"] or 0,
+        "createdAt": event["created_at"],
+        "updatedAt": event["updated_at"],
+    }
+
+
+def concert_wishlist_payload(item):
+    return {
+        "id": item["id"],
+        "artist": item["artist"],
+        "sortOrder": item["sort_order"] or 0,
+        "createdAt": item["created_at"],
+        "updatedAt": item["updated_at"],
+    }
+
+
+def normalise_concert_event_payload(data):
+    status = (data.get("status") or "upcoming").strip().lower()
+    if status not in ("attended", "upcoming", "cancelled"):
+        status = "upcoming"
+    event_date = (data.get("eventDate") or data.get("event_date") or "").strip()[:10]
+    if event_date and not re.match(r"^\d{4}-\d{2}-\d{2}$", event_date):
+        return None, "Use dates in YYYY-MM-DD format"
+    return {
+        "artist": (data.get("artist") or "").strip()[:160],
+        "city": (data.get("city") or "").strip()[:120],
+        "eventDate": event_date,
+        "dateNote": (data.get("dateNote") or data.get("date_note") or "").strip()[:40],
+        "openers": (data.get("openers") or "").strip()[:240],
+        "status": status,
+    }, None
+
 def gallery_photo_payload(photo):
     return {
         "id": photo["id"],
@@ -1550,6 +1745,36 @@ def update_about():
     return jsonify({"success": True})
 
 
+
+@app.route("/socials", methods=["GET"])
+def get_socials():
+    db = get_db()
+    page = db.execute("SELECT title, content, updated_at FROM pages WHERE slug = 'socials'").fetchone()
+    if not page:
+        return jsonify({**DEFAULT_SOCIALS_OBJECT, "updatedAt": None})
+    payload = socials_payload_from_content(page["content"])
+    return jsonify({**payload, "updatedAt": page["updated_at"]})
+
+
+@app.route("/socials", methods=["PUT"])
+def update_socials():
+    user = current_user()
+    if not is_runitrench(user):
+        return {"error": "Unauthorized"}, 401
+    payload = normalise_socials_payload(request.get_json() or {})
+    db = get_db()
+    db.execute(
+        """
+        UPDATE pages
+        SET title = ?, content = ?, updated_at = ?, updated_by = ?
+        WHERE slug = 'socials'
+        """,
+        (payload["title"], json.dumps(payload), datetime.now(), user["id"]),
+    )
+    db.commit()
+    return jsonify({"success": True, **payload})
+
+
 @app.route("/spotify", methods=["GET"])
 def get_spotify():
     db = get_db()
@@ -1734,6 +1959,141 @@ def delete_account():
     resp = make_response(jsonify({"success": True, "deletedUserId": deleted_user["id"]}))
     resp.set_cookie("session_id", "", expires=0)
     return resp
+
+
+
+@app.route("/concerts", methods=["GET"])
+def get_concerts():
+    db = get_db()
+    events = db.execute(
+        """
+        SELECT id, artist, city, event_date, date_note, openers, status, sort_order, created_at, updated_at
+        FROM concert_events
+        ORDER BY sort_order ASC, id ASC
+        """
+    ).fetchall()
+    wishlist = db.execute(
+        """
+        SELECT id, artist, sort_order, created_at, updated_at
+        FROM concert_wishlist
+        ORDER BY sort_order ASC, id ASC
+        """
+    ).fetchall()
+    return jsonify({
+        "events": [concert_event_payload(event) for event in events],
+        "wishlist": [concert_wishlist_payload(item) for item in wishlist],
+    })
+
+
+@app.route("/concerts/events", methods=["POST"])
+def create_concert_event():
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    data, error = normalise_concert_event_payload(request.get_json() or {})
+    if error:
+        return {"error": error}, 400
+    if not data["artist"]:
+        return {"error": "Artist is required"}, 400
+    db = get_db()
+    next_order = db.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM concert_events").fetchone()["next_order"]
+    now = datetime.now()
+    cursor = db.execute(
+        """
+        INSERT INTO concert_events (artist, city, event_date, date_note, openers, status, sort_order, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (data["artist"], data["city"], data["eventDate"], data["dateNote"], data["openers"], data["status"], next_order, now, now),
+    )
+    db.commit()
+    event = db.execute("SELECT * FROM concert_events WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return jsonify(concert_event_payload(event)), 201
+
+
+@app.route("/concerts/events/<int:event_id>", methods=["PUT"])
+def update_concert_event(event_id):
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    data, error = normalise_concert_event_payload(request.get_json() or {})
+    if error:
+        return {"error": error}, 400
+    if not data["artist"]:
+        return {"error": "Artist is required"}, 400
+    db = get_db()
+    result = db.execute(
+        """
+        UPDATE concert_events
+        SET artist = ?, city = ?, event_date = ?, date_note = ?, openers = ?, status = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (data["artist"], data["city"], data["eventDate"], data["dateNote"], data["openers"], data["status"], datetime.now(), event_id),
+    )
+    if result.rowcount == 0:
+        return {"error": "Concert not found"}, 404
+    db.commit()
+    event = db.execute("SELECT * FROM concert_events WHERE id = ?", (event_id,)).fetchone()
+    return jsonify(concert_event_payload(event))
+
+
+@app.route("/concerts/events/<int:event_id>", methods=["DELETE"])
+def delete_concert_event(event_id):
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    db = get_db()
+    result = db.execute("DELETE FROM concert_events WHERE id = ?", (event_id,))
+    if result.rowcount == 0:
+        return {"error": "Concert not found"}, 404
+    db.commit()
+    return jsonify({"success": True})
+
+
+@app.route("/concerts/wishlist", methods=["POST"])
+def create_concert_wishlist_item():
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    artist = (request.get_json() or {}).get("artist", "").strip()[:160]
+    if not artist:
+        return {"error": "Artist is required"}, 400
+    db = get_db()
+    next_order = db.execute("SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM concert_wishlist").fetchone()["next_order"]
+    now = datetime.now()
+    cursor = db.execute(
+        "INSERT INTO concert_wishlist (artist, sort_order, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        (artist, next_order, now, now),
+    )
+    db.commit()
+    item = db.execute("SELECT * FROM concert_wishlist WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return jsonify(concert_wishlist_payload(item)), 201
+
+
+@app.route("/concerts/wishlist/<int:item_id>", methods=["PUT"])
+def update_concert_wishlist_item(item_id):
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    artist = (request.get_json() or {}).get("artist", "").strip()[:160]
+    if not artist:
+        return {"error": "Artist is required"}, 400
+    db = get_db()
+    result = db.execute(
+        "UPDATE concert_wishlist SET artist = ?, updated_at = ? WHERE id = ?",
+        (artist, datetime.now(), item_id),
+    )
+    if result.rowcount == 0:
+        return {"error": "Wishlist item not found"}, 404
+    db.commit()
+    item = db.execute("SELECT * FROM concert_wishlist WHERE id = ?", (item_id,)).fetchone()
+    return jsonify(concert_wishlist_payload(item))
+
+
+@app.route("/concerts/wishlist/<int:item_id>", methods=["DELETE"])
+def delete_concert_wishlist_item(item_id):
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    db = get_db()
+    result = db.execute("DELETE FROM concert_wishlist WHERE id = ?", (item_id,))
+    if result.rowcount == 0:
+        return {"error": "Wishlist item not found"}, 404
+    db.commit()
+    return jsonify({"success": True})
 
 
 @app.route("/gallery", methods=["GET"])

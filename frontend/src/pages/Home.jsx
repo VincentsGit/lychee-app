@@ -285,26 +285,38 @@ export default function Home({ user }) {
                   {decodeDisplayText(page.hero.secondaryButton.label)}
                 </Button>
               </Stack>
-              <Box
+              <Stack
+                spacing={1.2}
+                alignItems="center"
                 sx={{
                   p: { xs: 2, md: 3 },
-                  minHeight: { xs: 300, md: 370 },
                   width: "100%",
                   maxWidth: { xs: 420, lg: 540 },
                   alignSelf: { xs: "center", lg: "flex-start" },
-                  display: "grid",
-                  placeItems: "center",
                   position: "relative",
                 }}
               >
-                <Box component="img" src={getPandaImage(page.hero.pandaImage)} alt={decodeDisplayText(page.hero.imageAlt)} sx={{ width: "74%", maxWidth: 340, zIndex: 1 }} />
-                {page.hero.showLavender && (
-                  <Box component="img" src={lavenderGif} alt="" sx={{ position: "absolute", left: { xs: 18, md: 28 }, top: { xs: 18, md: 24 }, width: { xs: 64, md: 76 } }} />
+                <Box
+                  sx={{
+                    width: "100%",
+                    minHeight: { xs: 230, md: 290 },
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                >
+                  <Box component="img" src={getPandaImage(page.hero.pandaImage)} alt={decodeDisplayText(page.hero.imageAlt)} sx={{ width: "74%", maxWidth: 340 }} />
+                </Box>
+                {(page.hero.showLavender || page.hero.showFlowers) && (
+                  <Stack direction="row" spacing={1.25} alignItems="flex-end" justifyContent="center" sx={{ minHeight: { xs: 58, md: 68 } }}>
+                    {page.hero.showLavender && (
+                      <Box component="img" src={lavenderGif} alt="" sx={{ width: { xs: 70, md: 82 } }} />
+                    )}
+                    {page.hero.showFlowers && (
+                      <Box component="img" src={flowersGif} alt="" sx={{ width: { xs: 118, md: 142 } }} />
+                    )}
+                  </Stack>
                 )}
-                {page.hero.showFlowers && (
-                  <Box component="img" src={flowersGif} alt="" sx={{ position: "absolute", right: { xs: 12, md: 20 }, bottom: { xs: 8, md: 14 }, width: { xs: 100, md: 124 } }} />
-                )}
-              </Box>
+              </Stack>
             </Stack>
 
             <Stack

@@ -6,70 +6,124 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
 import SaveIcon from "@mui/icons-material/Save";
-import { Alert, Box, Button, Chip, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Paper, Stack, TextField, Typography } from "@mui/material";
 import AnimatedSection from "../components/AnimatedSection";
 import { api } from "../components/api";
 import { decodeDisplayText } from "../components/displayText";
 
 const emptyDraft = { caption: "", file: null };
 
-function PhotoCard({ photo, canEdit, onEdit, onDelete }) {
+function PhotoCard({ photo, canEdit, onEdit, onDelete, onOpen }) {
+  const caption = decodeDisplayText(photo.caption || "");
+  const openPhoto = () => onOpen(photo);
+
   return (
-    <Paper
-      elevation={0}
+    <Box
+      role="button"
+      tabIndex={0}
+      onClick={openPhoto}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openPhoto();
+        }
+      }}
+      aria-label={caption ? `Open photo: ${caption}` : "Open gallery photo"}
       sx={{
-        p: 1.4,
-        height: "100%",
-        borderRadius: 4,
-        bgcolor: "background.paper",
+        position: "relative",
+        display: "block",
+        width: "100%",
+        aspectRatio: "1 / 1",
         border: "1px solid",
-        borderColor: "rgba(255, 204, 131, 0.26)",
-        boxShadow: "0 22px 58px rgba(0, 0, 0, 0.22)",
+        borderColor: "rgba(205, 180, 255, 0.18)",
+        borderRadius: { xs: 1.2, sm: 1.8 },
+        overflow: "hidden",
+        bgcolor: "rgba(255, 255, 255, 0.04)",
+        cursor: "pointer",
+        boxShadow: "none",
+        lineHeight: 0,
+        transition: "transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease",
+        "&:hover, &:focus-visible": {
+          transform: "translateY(-2px)",
+          borderColor: "rgba(255, 204, 131, 0.72)",
+          boxShadow: "0 16px 42px rgba(0, 0, 0, 0.22)",
+          outline: "none",
+        },
+        "&:hover .gallery-caption-overlay, &:focus-visible .gallery-caption-overlay": {
+          opacity: 1,
+        },
       }}
     >
-      <Stack spacing={1.5} sx={{ height: "100%" }}>
+      <Box
+        component="img"
+        src={photo.imageUrl}
+        alt={caption || "Gallery photo"}
+        loading="lazy"
+        sx={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          bgcolor: "background.default",
+        }}
+      />
+
+      {caption && (
         <Box
+          className="gallery-caption-overlay"
           sx={{
-            p: 1,
-            bgcolor: "rgba(255, 255, 255, 0.88)",
-            borderRadius: 3,
-            boxShadow: "inset 0 0 0 1px rgba(44, 39, 56, 0.08)",
+            position: "absolute",
+            inset: "auto 0 0",
+            p: { xs: 0.75, sm: 1 },
+            background: "linear-gradient(180deg, transparent, rgba(10, 8, 18, 0.84))",
+            opacity: { xs: 1, md: 0 },
+            transition: "opacity 180ms ease",
+            lineHeight: 1.2,
+            textAlign: "left",
           }}
         >
-          <Box
-            component="img"
-            src={photo.imageUrl}
-            alt={decodeDisplayText(photo.caption) || "Gallery photo"}
-            loading="lazy"
+          <Typography
+            variant="caption"
             sx={{
-              display: "block",
-              width: "100%",
-              aspectRatio: "4 / 5",
-              objectFit: "cover",
-              borderRadius: 2,
-              bgcolor: "background.default",
+              color: "#fff7ec",
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              textShadow: "0 1px 8px rgba(0, 0, 0, 0.5)",
             }}
-          />
+          >
+            {caption}
+          </Typography>
         </Box>
-        <Box sx={{ px: 0.75, pb: 0.4, flex: 1 }}>
-          {photo.caption ? (
-            <Typography color="text.secondary" sx={{ whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
-              {decodeDisplayText(photo.caption)}
-            </Typography>
-          ) : (
-            <Typography color="text.secondary" sx={{ opacity: 0.62, fontStyle: "italic" }}>
-              No caption yet.
-            </Typography>
-          )}
-        </Box>
-        {canEdit && (
-          <Stack direction="row" spacing={1} justifyContent="flex-end">
-            <IconButton onClick={() => onEdit(photo)} aria-label="Edit caption"><EditIcon /></IconButton>
-            <IconButton onClick={() => onDelete(photo)} aria-label="Delete photo" color="error"><DeleteIcon /></IconButton>
-          </Stack>
-        )}
-      </Stack>
-    </Paper>
+      )}
+
+      {canEdit && (
+        <Stack
+          direction="row"
+          spacing={0.5}
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          sx={{
+            position: "absolute",
+            top: { xs: 4, sm: 6 },
+            right: { xs: 4, sm: 6 },
+            p: 0.35,
+            borderRadius: 999,
+            bgcolor: "rgba(23, 19, 38, 0.78)",
+            backdropFilter: "blur(8px)",
+            lineHeight: 1,
+          }}
+        >
+          <IconButton size="small" onClick={() => onEdit(photo)} aria-label="Edit caption" sx={{ color: "#fff7ec" }}>
+            <EditIcon fontSize="inherit" />
+          </IconButton>
+          <IconButton size="small" onClick={() => onDelete(photo)} aria-label="Delete photo" sx={{ color: "#ffb4a2" }}>
+            <DeleteIcon fontSize="inherit" />
+          </IconButton>
+        </Stack>
+      )}
+    </Box>
   );
 }
 
@@ -78,6 +132,7 @@ export default function Gallery({ user }) {
   const [photos, setPhotos] = useState([]);
   const [draft, setDraft] = useState(emptyDraft);
   const [editing, setEditing] = useState(null);
+  const [activePhoto, setActivePhoto] = useState(null);
   const [editCaption, setEditCaption] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -146,6 +201,8 @@ export default function Gallery({ user }) {
     try {
       await api(`/api/gallery/${photo.id}`, { method: "DELETE" });
       setPhotos((current) => current.filter((item) => item.id !== photo.id));
+      setActivePhoto((current) => (current?.id === photo.id ? null : current));
+      if (editing?.id === photo.id) setEditing(null);
       setStatus("Photo deleted.");
     } catch (err) {
       setError(err.message);
@@ -153,6 +210,7 @@ export default function Gallery({ user }) {
   };
 
   const startEdit = (photo) => {
+    setActivePhoto(null);
     setEditing(photo);
     setEditCaption(photo.caption || "");
     setStatus("");
@@ -237,15 +295,18 @@ export default function Gallery({ user }) {
 
       <Box
         sx={{
+          width: "100%",
+          maxWidth: { xs: "100%", md: 980 },
+          mx: "auto",
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 240px), 1fr))",
-          gap: { xs: 2.4, md: 3 },
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          gap: { xs: 0.55, sm: 0.85, md: 1.15 },
           alignItems: "stretch",
         }}
       >
         {photos.map((photo, index) => (
-          <AnimatedSection key={photo.id} delay={80 + (index % 8) * 45} sx={{ height: "100%" }}>
-            <PhotoCard photo={photo} canEdit={canEdit} onEdit={startEdit} onDelete={deletePhoto} />
+          <AnimatedSection key={photo.id} delay={80 + (index % 9) * 28} sx={{ minWidth: 0 }}>
+            <PhotoCard photo={photo} canEdit={canEdit} onEdit={startEdit} onDelete={deletePhoto} onOpen={setActivePhoto} />
           </AnimatedSection>
         ))}
       </Box>
@@ -258,6 +319,74 @@ export default function Gallery({ user }) {
           </Paper>
         </AnimatedSection>
       )}
+
+      <Dialog
+        open={Boolean(activePhoto)}
+        onClose={() => setActivePhoto(null)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 4,
+            overflow: "hidden",
+            bgcolor: "background.paper",
+          },
+        }}
+      >
+        {activePhoto && (
+          <>
+            <DialogTitle sx={{ pr: 7 }}>
+              <Typography variant="h3" color="blog.subheading">Gallery photo</Typography>
+              <IconButton
+                onClick={() => setActivePhoto(null)}
+                aria-label="Close photo preview"
+                sx={{ position: "absolute", right: 12, top: 12 }}
+              >
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent>
+              <Box
+                sx={{
+                  borderRadius: 3,
+                  overflow: "hidden",
+                  bgcolor: "rgba(0, 0, 0, 0.35)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Box
+                  component="img"
+                  src={activePhoto.imageUrl}
+                  alt={decodeDisplayText(activePhoto.caption) || "Gallery photo"}
+                  sx={{
+                    display: "block",
+                    width: "100%",
+                    maxHeight: { xs: "68vh", md: "72vh" },
+                    objectFit: "contain",
+                  }}
+                />
+              </Box>
+              {activePhoto.caption ? (
+                <Typography color="text.secondary" sx={{ mt: 2, whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
+                  {decodeDisplayText(activePhoto.caption)}
+                </Typography>
+              ) : (
+                <Typography color="text.secondary" sx={{ mt: 2, opacity: 0.65, fontStyle: "italic" }}>
+                  No caption yet.
+                </Typography>
+              )}
+            </DialogContent>
+            {canEdit && (
+              <DialogActions sx={{ px: 3, pb: 2.5 }}>
+                <Button startIcon={<EditIcon />} onClick={() => startEdit(activePhoto)}>Edit caption</Button>
+                <Button color="error" startIcon={<DeleteIcon />} onClick={() => deletePhoto(activePhoto)}>Delete photo</Button>
+              </DialogActions>
+            )}
+          </>
+        )}
+      </Dialog>
 
       {editing && (
         <Paper
