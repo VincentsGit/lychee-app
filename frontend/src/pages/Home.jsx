@@ -220,7 +220,7 @@ export default function Home({ user }) {
         alignItems: "stretch",
         boxSizing: "border-box",
         width: "100%",
-        maxWidth: 1480,
+        maxWidth: { xs: "100%", lg: 980 },
         mx: "auto",
         overflowX: "clip",
       }}
@@ -242,9 +242,11 @@ export default function Home({ user }) {
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.25fr) minmax(300px, 0.75fr)" },
-              gap: { xs: 4, lg: 5 },
+              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 540px) minmax(300px, 390px)" },
+              columnGap: { xs: 0, lg: 5 },
+              rowGap: { xs: 4, lg: 0 },
               alignItems: "start",
+              justifyContent: "center",
               width: "100%",
             }}
           >
@@ -253,7 +255,7 @@ export default function Home({ user }) {
               alignItems={{ xs: "center", lg: "flex-start" }}
               sx={{
                 width: "100%",
-                maxWidth: { xs: 860, lg: 700 },
+                maxWidth: { xs: 860, lg: 540 },
                 mx: { xs: "auto", lg: 0 },
                 textAlign: { xs: "center", lg: "left" },
                 minWidth: 0,
@@ -289,7 +291,7 @@ export default function Home({ user }) {
                   p: { xs: 3, md: 4 },
                   minHeight: { xs: 320, md: 390 },
                   width: "100%",
-                  maxWidth: { xs: 420, lg: 500 },
+                  maxWidth: { xs: 420, lg: 540 },
                   alignSelf: { xs: "center", lg: "flex-start" },
                   display: "grid",
                   placeItems: "center",

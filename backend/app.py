@@ -349,6 +349,38 @@ def init_db():
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS watchlist_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            media_type TEXT NOT NULL DEFAULT 'movie',
+            title TEXT NOT NULL,
+            release_year TEXT DEFAULT '',
+            details TEXT DEFAULT '',
+            review TEXT DEFAULT '',
+            image_url TEXT DEFAULT '',
+            is_watched INTEGER DEFAULT 0,
+            rating INTEGER DEFAULT NULL,
+            watched_at DATETIME DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    for statement in [
+        ("media_type", "ALTER TABLE watchlist_items ADD COLUMN media_type TEXT NOT NULL DEFAULT 'movie'"),
+        ("release_year", "ALTER TABLE watchlist_items ADD COLUMN release_year TEXT DEFAULT ''"),
+        ("details", "ALTER TABLE watchlist_items ADD COLUMN details TEXT DEFAULT ''"),
+        ("review", "ALTER TABLE watchlist_items ADD COLUMN review TEXT DEFAULT ''"),
+        ("image_url", "ALTER TABLE watchlist_items ADD COLUMN image_url TEXT DEFAULT ''"),
+        ("is_watched", "ALTER TABLE watchlist_items ADD COLUMN is_watched INTEGER DEFAULT 0"),
+        ("rating", "ALTER TABLE watchlist_items ADD COLUMN rating INTEGER DEFAULT NULL"),
+        ("watched_at", "ALTER TABLE watchlist_items ADD COLUMN watched_at DATETIME DEFAULT NULL"),
+        ("created_at", "ALTER TABLE watchlist_items ADD COLUMN created_at DATETIME"),
+        ("updated_at", "ALTER TABLE watchlist_items ADD COLUMN updated_at DATETIME"),
+    ]:
+        if not column_exists(db, "watchlist_items", statement[0]):
+            db.execute(statement[1])
     if not column_exists(db, "travel_items", "is_done"):
         db.execute("ALTER TABLE travel_items ADD COLUMN is_done INTEGER DEFAULT 0")
     if not column_exists(db, "travel_items", "section_title"):
@@ -358,10 +390,12 @@ def init_db():
     if not column_exists(db, "travel_items", "completed_at"):
         db.execute("ALTER TABLE travel_items ADD COLUMN completed_at DATETIME")
     db.execute("UPDATE travel_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
+    db.execute("UPDATE watchlist_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)")
     for statement in [
         "CREATE INDEX IF NOT EXISTS idx_posts_category_created ON posts(category, created_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_comments_post_created ON comments(post_id, created_at ASC)",
         "CREATE INDEX IF NOT EXISTS idx_travel_items_plan_order ON travel_items(plan_id, sort_order ASC, id ASC)",
+        "CREATE INDEX IF NOT EXISTS idx_watchlist_status_updated ON watchlist_items(is_watched ASC, updated_at DESC, id DESC)",
         "CREATE INDEX IF NOT EXISTS idx_cookies_value ON cookies(cookie_value)",
         "CREATE INDEX IF NOT EXISTS idx_cookies_created ON cookies(created_at)",
     ]:
@@ -666,6 +700,65 @@ def normalise_home_payload(data):
             "showFlowers": bool(hero.get("showFlowers", True)),
         },
         "bubbles": bubbles,
+    }
+
+
+def normalise_watchlist_rating(value):
+    if value is None or value == "":
+        return None, None
+    try:
+        rating = int(value)
+    except (TypeError, ValueError):
+        return None, "Rating must be between 0 and 5"
+    if rating < 0 or rating > 5:
+        return None, "Rating must be between 0 and 5"
+    return rating, None
+
+
+def normalise_watchlist_payload(data):
+    data = data if isinstance(data, dict) else {}
+    title = (data.get("title") or "").strip()[:160]
+    media_type = (data.get("mediaType") or data.get("media_type") or "movie").strip().lower()
+    if media_type in ("tv", "show", "series", "tv-show", "tv_show"):
+        media_type = "tv"
+    elif media_type != "movie":
+        media_type = "movie"
+    rating, rating_error = normalise_watchlist_rating(data.get("rating"))
+    if rating_error:
+        return None, rating_error
+
+    image_url = (data.get("imageUrl") or data.get("image_url") or "").strip()[:500]
+    if image_url.startswith("/tmp-uploads/"):
+        migrated = migrate_images(f'<img src="{image_url}">')
+        match = re.search(IMG_SRC_REGEX, migrated)
+        image_url = match.group(1) if match else ""
+
+    return {
+        "mediaType": media_type,
+        "title": title,
+        "releaseYear": str(data.get("releaseYear") or data.get("release_year") or "").strip()[:40],
+        "details": (data.get("details") or "").strip()[:4000],
+        "review": (data.get("review") or "").strip()[:6000],
+        "imageUrl": image_url,
+        "isWatched": bool(data.get("isWatched") or data.get("is_watched")),
+        "rating": rating,
+    }, None
+
+
+def watchlist_item_payload(item):
+    return {
+        "id": item["id"],
+        "mediaType": item["media_type"],
+        "title": item["title"],
+        "releaseYear": item["release_year"] or "",
+        "details": item["details"] or "",
+        "review": item["review"] or "",
+        "imageUrl": item["image_url"] or "",
+        "isWatched": bool(item["is_watched"]),
+        "rating": item["rating"] if item["rating"] is not None else None,
+        "watchedAt": item["watched_at"],
+        "createdAt": item["created_at"],
+        "updatedAt": item["updated_at"],
     }
 
 
@@ -1668,6 +1761,163 @@ def delete_travel_plan(plan_id):
     result = db.execute("DELETE FROM travel_plans WHERE id = ?", (plan_id,))
     if result.rowcount == 0:
         return {"error": "Travel plan not found"}, 404
+    db.commit()
+    return jsonify({"success": True})
+
+
+@app.route("/watchlist", methods=["GET"])
+def get_watchlist():
+    db = get_db()
+    items = db.execute(
+        """
+        SELECT id, media_type, title, release_year, details, review, image_url, is_watched, rating,
+               watched_at, created_at, updated_at
+        FROM watchlist_items
+        ORDER BY is_watched ASC, COALESCE(watched_at, updated_at, created_at) DESC, id DESC
+        """
+    ).fetchall()
+    return jsonify([watchlist_item_payload(item) for item in items])
+
+
+@app.route("/watchlist/<int:item_id>", methods=["GET"])
+def get_watchlist_item(item_id):
+    db = get_db()
+    item = db.execute(
+        """
+        SELECT id, media_type, title, release_year, details, review, image_url, is_watched, rating,
+               watched_at, created_at, updated_at
+        FROM watchlist_items
+        WHERE id = ?
+        """,
+        (item_id,),
+    ).fetchone()
+    if not item:
+        return {"error": "Watchlist item not found"}, 404
+    return jsonify(watchlist_item_payload(item))
+
+
+@app.route("/watchlist", methods=["POST"])
+def create_watchlist_item():
+    user = current_user()
+    if not is_runitrench(user):
+        return {"error": "Unauthorized"}, 401
+    data, error = normalise_watchlist_payload(request.get_json() or {})
+    if error:
+        return {"error": error}, 400
+    if not data["title"]:
+        return {"error": "Title is required"}, 400
+
+    now = datetime.now()
+    watched_at = now if data["isWatched"] else None
+    db = get_db()
+    cursor = db.execute(
+        """
+        INSERT INTO watchlist_items
+            (media_type, title, release_year, details, review, image_url, is_watched, rating, watched_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            data["mediaType"],
+            data["title"],
+            data["releaseYear"],
+            data["details"],
+            data["review"],
+            data["imageUrl"],
+            1 if data["isWatched"] else 0,
+            data["rating"],
+            watched_at,
+            now,
+            now,
+        ),
+    )
+    db.commit()
+    if data["imageUrl"].startswith("/uploads/"):
+        clear_tmp_uploads()
+    item = db.execute("SELECT * FROM watchlist_items WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return jsonify(watchlist_item_payload(item)), 201
+
+
+@app.route("/watchlist/<int:item_id>", methods=["PUT"])
+def update_watchlist_item(item_id):
+    user = current_user()
+    if not is_runitrench(user):
+        return {"error": "Unauthorized"}, 401
+    data, error = normalise_watchlist_payload(request.get_json() or {})
+    if error:
+        return {"error": error}, 400
+    if not data["title"]:
+        return {"error": "Title is required"}, 400
+
+    db = get_db()
+    current = db.execute("SELECT watched_at, is_watched FROM watchlist_items WHERE id = ?", (item_id,)).fetchone()
+    if not current:
+        return {"error": "Watchlist item not found"}, 404
+    now = datetime.now()
+    watched_at = current["watched_at"]
+    if data["isWatched"] and not current["is_watched"]:
+        watched_at = now
+    if not data["isWatched"]:
+        watched_at = None
+    db.execute(
+        """
+        UPDATE watchlist_items
+        SET media_type = ?, title = ?, release_year = ?, details = ?, review = ?, image_url = ?,
+            is_watched = ?, rating = ?, watched_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            data["mediaType"],
+            data["title"],
+            data["releaseYear"],
+            data["details"],
+            data["review"],
+            data["imageUrl"],
+            1 if data["isWatched"] else 0,
+            data["rating"],
+            watched_at,
+            now,
+            item_id,
+        ),
+    )
+    db.commit()
+    if data["imageUrl"].startswith("/uploads/"):
+        clear_tmp_uploads()
+    item = db.execute("SELECT * FROM watchlist_items WHERE id = ?", (item_id,)).fetchone()
+    return jsonify(watchlist_item_payload(item))
+
+
+@app.route("/watchlist/<int:item_id>/watched", methods=["PATCH"])
+def update_watchlist_watched(item_id):
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    data = request.get_json() or {}
+    is_watched = 1 if data.get("isWatched") else 0
+    now = datetime.now()
+    watched_at = now if is_watched else None
+    db = get_db()
+    result = db.execute(
+        """
+        UPDATE watchlist_items
+        SET is_watched = ?, watched_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (is_watched, watched_at, now, item_id),
+    )
+    if result.rowcount == 0:
+        return {"error": "Watchlist item not found"}, 404
+    db.commit()
+    item = db.execute("SELECT * FROM watchlist_items WHERE id = ?", (item_id,)).fetchone()
+    return jsonify(watchlist_item_payload(item))
+
+
+@app.route("/watchlist/<int:item_id>", methods=["DELETE"])
+def delete_watchlist_item(item_id):
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    db = get_db()
+    result = db.execute("DELETE FROM watchlist_items WHERE id = ?", (item_id,))
+    if result.rowcount == 0:
+        return {"error": "Watchlist item not found"}, 404
     db.commit()
     return jsonify({"success": True})
 

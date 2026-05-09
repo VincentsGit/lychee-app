@@ -41,6 +41,7 @@ const Spotify = lazy(() => import("./pages/Spotify"));
 const SteamSavings = lazy(() => import("./pages/SteamSavings"));
 const Travel = lazy(() => import("./pages/Travel"));
 const User = lazy(() => import("./pages/User"));
+const Watchlist = lazy(() => import("./pages/Watchlist"));
 
 function AppShell() {
   const sidebarWidth = 280;
@@ -73,6 +74,7 @@ function AppShell() {
     { label: "About", to: "/about" },
     { label: "Blog", to: "/blog" },
     { label: "Travel", to: "/travel" },
+    { label: "Watchlist", to: "/watchlist" },
     { label: "Spotify", to: "/spotify" },
     { label: "Games", to: "/games" },
     { label: "Socials", to: "/socials" },
@@ -217,6 +219,8 @@ function AppShell() {
                 <Route path="/blog" element={<Blog user={user} />} />
                 <Route path="/travel" element={<Travel user={user} />} />
                 <Route path="/travel/:planId" element={<Travel user={user} />} />
+                <Route path="/watchlist" element={<Watchlist user={user} />} />
+                <Route path="/watchlist/:itemId" element={<Watchlist user={user} />} />
                 <Route path="/spotify" element={<Spotify user={user} />} />
                 <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
                 <Route path="/edit/:postId" element={<EditPost />} />
