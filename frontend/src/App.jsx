@@ -27,6 +27,53 @@ import { getTheme } from "./components/theme";
 import UserAvatar from "./components/UserAvatar";
 import PandaIcon from "./icons/panda.png";
 
+function SystemClock() {
+  const formatTime = () =>
+    new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    });
+
+  const [time, setTime] = useState(formatTime);
+
+  useEffect(() => {
+    const tick = () => setTime(formatTime());
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <Box
+      component="time"
+      dateTime={time}
+      sx={{
+        display: "inline-flex",
+        alignItems: "center",
+        width: "fit-content",
+        mt: 0.7,
+        px: 1,
+        py: 0.35,
+        borderRadius: 999,
+        border: "1px solid",
+        borderColor: "rgba(255, 204, 131, 0.36)",
+        color: "secondary.main",
+        bgcolor: "rgba(255, 204, 131, 0.08)",
+        fontFamily: (currentTheme) => currentTheme.typography.monoFontFamily,
+        fontSize: { xs: "0.76rem", md: "0.8rem", lg: "0.86rem" },
+        fontWeight: 800,
+        letterSpacing: "0.08em",
+        lineHeight: 1,
+        textShadow: "0 0 16px rgba(255, 204, 131, 0.42)",
+      }}
+    >
+      {time}
+    </Box>
+  );
+}
+
 const About = lazy(() => import("./pages/About"));
 const Blog = lazy(() => import("./pages/Blog"));
 const BlogPost = lazy(() => import("./pages/BlogPost"));
@@ -44,7 +91,7 @@ const User = lazy(() => import("./pages/User"));
 const Watchlist = lazy(() => import("./pages/Watchlist"));
 
 function AppShell() {
-  const sidebarWidth = 280;
+  const sidebarWidth = 256;
   const [mode, setMode] = useState("dark");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState(undefined);
@@ -80,15 +127,26 @@ function AppShell() {
     { label: "Socials", to: "/socials" },
   ];
 
+  const sidebarButtonSx = {
+    justifyContent: "flex-start",
+    width: "100%",
+    px: 2,
+    py: { xs: 0.95, md: 1.08, lg: 1.15 },
+    minHeight: { xs: 42, md: 46, lg: 48 },
+    fontSize: { xs: "0.9rem", md: "0.98rem", lg: "1.05rem" },
+    letterSpacing: "0.025em",
+    lineHeight: 1.2,
+  };
+
   const nav = (
-    <Stack spacing={1.2}>
+    <Stack spacing={{ xs: 1, md: 1.05 }}>
       {navItems.map((item) => (
         <Button
           key={item.to}
           component={RouterLink}
           to={item.to}
           onClick={() => setMobileOpen(false)}
-          sx={{ justifyContent: "flex-start", px: 2 }}
+          sx={sidebarButtonSx}
         >
           {item.label}
         </Button>
@@ -99,7 +157,7 @@ function AppShell() {
           to="/create"
           startIcon={<CreateIcon />}
           onClick={() => setMobileOpen(false)}
-          sx={{ justifyContent: "flex-start", px: 2 }}
+          sx={sidebarButtonSx}
         >
           Create
         </Button>
@@ -108,13 +166,13 @@ function AppShell() {
   );
 
   const account = user ? (
-    <Stack spacing={1.2}>
+    <Stack spacing={{ xs: 1, md: 1.05 }}>
       <Button
         component={RouterLink}
         to={`/users/${user.id}`}
         onClick={() => setMobileOpen(false)}
         startIcon={<UserAvatar user={user} size={28} />}
-        sx={{ justifyContent: "flex-start", px: 2 }}
+        sx={sidebarButtonSx}
       >
         {decodeDisplayText(user.displayName || user.username)}
       </Button>
@@ -123,33 +181,34 @@ function AppShell() {
         to="/settings"
         startIcon={<SettingsIcon />}
         onClick={() => setMobileOpen(false)}
-        sx={{ justifyContent: "flex-start", px: 2 }}
+        sx={sidebarButtonSx}
       >
         Settings
       </Button>
-      <Button startIcon={<LogoutIcon />} onClick={logout} sx={{ justifyContent: "flex-start", px: 2 }}>
+      <Button startIcon={<LogoutIcon />} onClick={logout} sx={sidebarButtonSx}>
         Logout
       </Button>
     </Stack>
   ) : (
-    <Stack spacing={1.2}>
-      <Button component={RouterLink} to="/login" onClick={() => setMobileOpen(false)} sx={{ justifyContent: "flex-start", px: 2 }}>
+    <Stack spacing={{ xs: 1, md: 1.05 }}>
+      <Button component={RouterLink} to="/login" onClick={() => setMobileOpen(false)} sx={sidebarButtonSx}>
         Login
       </Button>
-      <Button component={RouterLink} to="/register" variant="contained" onClick={() => setMobileOpen(false)} sx={{ justifyContent: "flex-start", px: 2 }}>
+      <Button component={RouterLink} to="/register" variant="contained" onClick={() => setMobileOpen(false)} sx={sidebarButtonSx}>
         Register
       </Button>
     </Stack>
   );
 
   const drawer = (
-    <Box sx={{ p: 2.5, height: "100%", display: "flex", flexDirection: "column", gap: 3 }}>
+    <Box sx={{ p: { xs: 2.5, md: 2.25 }, height: "100%", display: "flex", flexDirection: "column", gap: { xs: 3, md: 2.6 } }}>
       <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
         <MUILink component={RouterLink} to="/" underline="none" color="inherit" onClick={() => setMobileOpen(false)} sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
           <Box component="img" src={PandaIcon} alt="lychee" sx={{ width: 42, height: 42, flexShrink: 0 }} />
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="h5" lineHeight={1}>lychee</Typography>
             <Typography variant="caption" color="text.secondary">my little site</Typography>
+            <SystemClock />
           </Box>
         </MUILink>
         <IconButton onClick={() => setMode((prev) => (prev === "light" ? "dark" : "light"))} aria-label="Toggle colour mode">
