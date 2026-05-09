@@ -6,7 +6,7 @@ import sqlite3
 import json
 import html
 from datetime import datetime, timedelta
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import requests
 from flask import Flask, g, jsonify, make_response, request, send_from_directory
@@ -715,6 +715,96 @@ def normalise_watchlist_rating(value):
     return rating, None
 
 
+def is_direct_image_url(value):
+    parsed = urlparse(value or "")
+    path = (parsed.path or "").lower()
+    return parsed.scheme in ("http", "https") and path.endswith((
+        ".apng",
+        ".avif",
+        ".gif",
+        ".jpeg",
+        ".jpg",
+        ".png",
+        ".webp",
+    ))
+
+
+def decode_embedded_url(value):
+    value = html.unescape(value or "").strip()
+    try:
+        return json.loads(f'"{value}"')
+    except (TypeError, json.JSONDecodeError):
+        return value.replace("\\/", "/")
+
+
+def absolute_preview_url(base_url, value):
+    value = decode_embedded_url(value)
+    if value.startswith("//"):
+        return f"{urlparse(base_url).scheme}:{value}"
+    return urljoin(base_url, value)
+
+
+def image_from_meta_tags(base_url, text):
+    wanted = {"og:image", "og:image:url", "twitter:image", "twitter:image:src", "image"}
+    for tag in re.findall(r"<meta\b[^>]*>", text or "", flags=re.IGNORECASE):
+        name_match = re.search(r'\b(?:property|name)=["\']([^"\']+)["\']', tag, flags=re.IGNORECASE)
+        content_match = re.search(r'\bcontent=["\']([^"\']+)["\']', tag, flags=re.IGNORECASE)
+        if name_match and content_match and name_match.group(1).lower() in wanted:
+            return absolute_preview_url(base_url, content_match.group(1))
+    return ""
+
+
+def image_from_common_page_markup(base_url, text):
+    patterns = [
+        r'data-old-hires=["\']([^"\']+)["\']',
+        r'"hiRes"\s*:\s*"([^"]+)"',
+        r'"landingImage"\s*:\s*"([^"]+)"',
+        r'"large"\s*:\s*"([^"]+)"',
+        r'<link[^>]+rel=["\']image_src["\'][^>]+href=["\']([^"\']+)["\']',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text or "", flags=re.IGNORECASE)
+        if match:
+            return absolute_preview_url(base_url, match.group(1))
+    return ""
+
+
+def resolve_watchlist_image_url(value):
+    raw = (value or "").strip()
+    if not raw or raw.startswith("/uploads/") or raw.startswith("/tmp-uploads/"):
+        return raw
+    parsed = urlparse(raw)
+    if parsed.scheme not in ("http", "https"):
+        return raw[:500]
+    if is_direct_image_url(raw):
+        return raw[:500]
+
+    try:
+        response = requests.get(
+            raw,
+            timeout=8,
+            headers={
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+                "Accept-Language": "en-GB,en;q=0.9",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+            },
+        )
+        response.raise_for_status()
+    except requests.RequestException:
+        return raw[:500]
+
+    content_type = (response.headers.get("content-type") or "").lower()
+    if content_type.startswith("image/"):
+        return response.url[:500]
+    if "html" not in content_type and "xml" not in content_type:
+        return raw[:500]
+
+    text = response.text[:2_500_000]
+    preview_url = image_from_meta_tags(response.url, text) or image_from_common_page_markup(response.url, text)
+    return (preview_url or raw)[:500]
+
+
 def normalise_watchlist_payload(data):
     data = data if isinstance(data, dict) else {}
     title = (data.get("title") or "").strip()[:160]
@@ -732,6 +822,8 @@ def normalise_watchlist_payload(data):
         migrated = migrate_images(f'<img src="{image_url}">')
         match = re.search(IMG_SRC_REGEX, migrated)
         image_url = match.group(1) if match else ""
+    else:
+        image_url = resolve_watchlist_image_url(image_url)
 
     return {
         "mediaType": media_type,

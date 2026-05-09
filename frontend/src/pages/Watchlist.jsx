@@ -57,6 +57,60 @@ function MediaIcon({ type }) {
   return type === "tv" ? <TvIcon /> : <MovieIcon />;
 }
 
+function PosterArtwork({ src, type, title, sx = {}, imageSx = {} }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  const showImage = Boolean(src) && !failed;
+  const escapedSrc = String(src || "").replace(/"/g, '\\"');
+
+  return (
+    <Box
+      sx={{
+        display: showImage ? "block" : "grid",
+        placeItems: showImage ? undefined : "center",
+        bgcolor: "background.default",
+        overflow: "hidden",
+        ...sx,
+      }}
+    >
+      {showImage ? (
+        <Box
+          sx={{
+            width: "100%",
+            height: "100%",
+            p: 1.5,
+            boxSizing: "border-box",
+            backgroundImage: `url("${escapedSrc}")`,
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "center",
+            backgroundSize: "contain",
+            backgroundOrigin: "content-box",
+            backgroundClip: "content-box",
+            ...imageSx,
+          }}
+        >
+          <Box
+            component="img"
+            src={src}
+            alt={title ? `${decodeDisplayText(title)} poster` : ""}
+            loading="lazy"
+            onError={() => setFailed(true)}
+            sx={{ display: "none" }}
+          />
+        </Box>
+      ) : (
+        <Box sx={{ color: "secondary.main", opacity: 0.9, transform: "scale(1.4)" }}>
+          <MediaIcon type={type} />
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 function RatingStars({ rating, compact = false }) {
   const isUnrated = rating === null || rating === undefined || rating === "";
   const value = isUnrated ? null : Number(rating);
@@ -134,10 +188,11 @@ function WatchlistEditor({ draft, onChange, onSave, onCancel, mode }) {
           </Stack>
 
           <TextField
-            label="Poster image URL (optional)"
+            label="Poster image or page URL (optional)"
             value={draft.imageUrl}
             onChange={(event) => update("imageUrl", event.target.value)}
-            placeholder="https://..."
+            placeholder="Paste a direct image, TMDB, Amazon, or other page URL"
+            helperText="If it is a page URL, the site will try to pull the preview image automatically."
           />
 
           <TextField
@@ -204,23 +259,12 @@ function WatchCard({ item, canEdit, onOpen, onEdit, onDelete, onToggle }) {
       }}
     >
       <Stack spacing={0} sx={{ height: "100%" }}>
-        <Box
-          sx={{
-            minHeight: 170,
-            display: "grid",
-            placeItems: "center",
-            bgcolor: "background.default",
-            overflow: "hidden",
-          }}
-        >
-          {item.imageUrl ? (
-            <Box component="img" src={item.imageUrl} alt="" sx={{ width: "100%", height: 220, objectFit: "cover" }} />
-          ) : (
-            <Box sx={{ color: "secondary.main", opacity: 0.9, transform: "scale(1.4)" }}>
-              <MediaIcon type={item.mediaType} />
-            </Box>
-          )}
-        </Box>
+        <PosterArtwork
+          src={item.imageUrl}
+          type={item.mediaType}
+          title={item.title}
+          sx={{ height: 240 }}
+        />
         <Stack spacing={2} sx={{ p: 2.5, flex: 1 }}>
           <Stack direction="row" spacing={1} alignItems="flex-start">
             <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -444,23 +488,17 @@ export default function Watchlist({ user }) {
           <AnimatedSection delay={60}>
             <Paper elevation={0} sx={{ overflow: "hidden", borderTop: "3px solid", borderTopColor: selectedItem.isWatched ? "secondary.main" : "primary.main" }}>
               <Stack direction={{ xs: "column", md: "row" }} spacing={0}>
-                <Box
+                <PosterArtwork
+                  src={selectedItem.imageUrl}
+                  type={selectedItem.mediaType}
+                  title={selectedItem.title}
                   sx={{
                     width: { xs: "100%", md: 360 },
                     minHeight: { xs: 260, md: 520 },
-                    display: "grid",
-                    placeItems: "center",
-                    bgcolor: "background.default",
-                    overflow: "hidden",
                     flexShrink: 0,
                   }}
-                >
-                  {selectedItem.imageUrl ? (
-                    <Box component="img" src={selectedItem.imageUrl} alt="" sx={{ width: "100%", height: "100%", minHeight: { xs: 260, md: 520 }, objectFit: "cover" }} />
-                  ) : (
-                    <Box sx={{ color: "secondary.main", transform: "scale(2.2)" }}><MediaIcon type={selectedItem.mediaType} /></Box>
-                  )}
-                </Box>
+                  imageSx={{ p: 2.5 }}
+                />
 
                 <Stack spacing={3} sx={{ p: { xs: 2.5, md: 4 }, minWidth: 0, flex: 1 }}>
                   <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }}>
