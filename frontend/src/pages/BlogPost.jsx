@@ -42,6 +42,90 @@ function buildCommentTree(comments, sortOrder) {
   return roots;
 }
 
+function CommentItem({
+  item,
+  depth = 0,
+  user,
+  replyingTo,
+  replyText,
+  onReplyTextChange,
+  onReplyToggle,
+  onReplyCancel,
+  onReplySubmit,
+}) {
+  const isReplying = replyingTo === item.id;
+  const displayName = decodeDisplayText(item.user.displayName);
+  const indent = Math.min(depth, 4);
+
+  return (
+    <Box sx={{ ml: { xs: indent ? 1.5 : 0, sm: indent * 3 }, pl: indent ? 1.5 : 0, borderLeft: indent ? "1px solid rgba(205, 180, 255, 0.22)" : "none" }}>
+      <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+        <UserAvatar user={item.user} />
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "baseline" }}>
+            <Button component={RouterLink} to={`/users/${item.user.id}`} sx={{ p: 0, minWidth: 0, fontWeight: 800 }}>
+              {displayName}
+            </Button>
+            <Typography variant="caption" color="text.secondary">
+              {new Date(item.createdAt).toLocaleString()}
+            </Typography>
+          </Stack>
+          <Typography sx={{ mt: 0.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{decodeDisplayText(item.content)}</Typography>
+          {user && (
+            <Button
+              size="small"
+              startIcon={<ReplyIcon />}
+              onClick={() => onReplyToggle(item.id, isReplying)}
+              sx={{ mt: 0.75, px: 0, minWidth: 0 }}
+            >
+              Reply
+            </Button>
+          )}
+          {isReplying && user && (
+            <Box component="form" onSubmit={(event) => onReplySubmit(event, item.id)} sx={{ mt: 1.25 }}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="flex-start">
+                <TextField
+                  value={replyText}
+                  onChange={(event) => onReplyTextChange(event.target.value)}
+                  placeholder={`Reply to ${displayName}...`}
+                  multiline
+                  minRows={2}
+                  fullWidth
+                  inputProps={{ maxLength: 1200 }}
+                />
+                <Stack direction="row" spacing={1}>
+                  <Button type="submit" variant="contained" endIcon={<SendIcon />} disabled={!replyText.trim()}>
+                    Reply
+                  </Button>
+                  <Button onClick={onReplyCancel}>Cancel</Button>
+                </Stack>
+              </Stack>
+            </Box>
+          )}
+        </Box>
+      </Box>
+      {item.children.length > 0 && (
+        <Stack spacing={2} sx={{ mt: 2 }}>
+          {item.children.map((child) => (
+            <CommentItem
+              key={child.id}
+              item={child}
+              depth={depth + 1}
+              user={user}
+              replyingTo={replyingTo}
+              replyText={replyText}
+              onReplyTextChange={onReplyTextChange}
+              onReplyToggle={onReplyToggle}
+              onReplyCancel={onReplyCancel}
+              onReplySubmit={onReplySubmit}
+            />
+          ))}
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
 export default function BlogPost({ user }) {
   const { postId } = useParams();
   const navigate = useNavigate();
@@ -107,68 +191,14 @@ export default function BlogPost({ user }) {
     }
   };
 
-  const CommentItem = ({ item, depth = 0 }) => {
-    const isReplying = replyingTo === item.id;
-    const displayName = decodeDisplayText(item.user.displayName);
-    const indent = Math.min(depth, 4);
+  const toggleReply = (commentId, isOpen) => {
+    setReplyingTo(isOpen ? null : commentId);
+    setReplyText("");
+  };
 
-    return (
-      <Box sx={{ ml: { xs: indent ? 1.5 : 0, sm: indent * 3 }, pl: indent ? 1.5 : 0, borderLeft: indent ? "1px solid rgba(205, 180, 255, 0.22)" : "none" }}>
-        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
-          <UserAvatar user={item.user} />
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "baseline" }}>
-              <Button component={RouterLink} to={`/users/${item.user.id}`} sx={{ p: 0, minWidth: 0, fontWeight: 800 }}>
-                {displayName}
-              </Button>
-              <Typography variant="caption" color="text.secondary">
-                {new Date(item.createdAt).toLocaleString()}
-              </Typography>
-            </Stack>
-            <Typography sx={{ mt: 0.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{decodeDisplayText(item.content)}</Typography>
-            {user && (
-              <Button
-                size="small"
-                startIcon={<ReplyIcon />}
-                onClick={() => {
-                  setReplyingTo(isReplying ? null : item.id);
-                  setReplyText("");
-                }}
-                sx={{ mt: 0.75, px: 0, minWidth: 0 }}
-              >
-                Reply
-              </Button>
-            )}
-            {isReplying && user && (
-              <Box component="form" onSubmit={(event) => submitReply(event, item.id)} sx={{ mt: 1.25 }}>
-                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="flex-start">
-                  <TextField
-                    value={replyText}
-                    onChange={(event) => setReplyText(event.target.value)}
-                    placeholder={`Reply to ${displayName}...`}
-                    multiline
-                    minRows={2}
-                    fullWidth
-                    inputProps={{ maxLength: 1200 }}
-                  />
-                  <Stack direction="row" spacing={1}>
-                    <Button type="submit" variant="contained" endIcon={<SendIcon />} disabled={!replyText.trim()}>
-                      Reply
-                    </Button>
-                    <Button onClick={() => { setReplyingTo(null); setReplyText(""); }}>Cancel</Button>
-                  </Stack>
-                </Stack>
-              </Box>
-            )}
-          </Box>
-        </Box>
-        {item.children.length > 0 && (
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            {item.children.map((child) => <CommentItem key={child.id} item={child} depth={depth + 1} />)}
-          </Stack>
-        )}
-      </Box>
-    );
+  const cancelReply = () => {
+    setReplyingTo(null);
+    setReplyText("");
   };
 
   if (loading) {
@@ -296,7 +326,19 @@ export default function BlogPost({ user }) {
             <Divider />
 
             <Stack spacing={2.5}>
-              {commentTree.map((item) => <CommentItem key={item.id} item={item} />)}
+              {commentTree.map((item) => (
+                <CommentItem
+                  key={item.id}
+                  item={item}
+                  user={user}
+                  replyingTo={replyingTo}
+                  replyText={replyText}
+                  onReplyTextChange={setReplyText}
+                  onReplyToggle={toggleReply}
+                  onReplyCancel={cancelReply}
+                  onReplySubmit={submitReply}
+                />
+              ))}
               {!comments.length && <Typography color="text.secondary">No comments yet.</Typography>}
             </Stack>
           </Stack>

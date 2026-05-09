@@ -118,7 +118,7 @@ export default function BlogPostContent({ content }) {
         return <></>;
       }
 
-      if (domNode.name === "p" && isMediaOnlyParagraph(domNode)) {
+      if ((domNode.name === "p" || domNode.name === "div") && isMediaOnlyParagraph(domNode)) {
         return <>{domToReact(domNode.children || [], options)}</>;
       }
 

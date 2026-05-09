@@ -25,6 +25,7 @@ import {
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import AnimatedSection from "../components/AnimatedSection";
+import UserAvatar from "../components/UserAvatar";
 import { api } from "../components/api";
 import { decodeDisplayText } from "../components/displayText";
 import flowersGif from "../icons/flowers.gif";
@@ -107,6 +108,7 @@ function getPandaImage(type) {
 export default function Home({ user }) {
   const [page, setPage] = useState(defaultHome);
   const [draft, setDraft] = useState(defaultHome);
+  const [runiUser, setRuniUser] = useState(null);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -120,6 +122,13 @@ export default function Home({ user }) {
         setDraft(next);
       })
       .catch((err) => setError(err.message));
+
+    api("/api/users/search?username=runitrench")
+      .then((data) => {
+        const exactMatch = data.users?.find((item) => item.username === "runitrench") || data.users?.[0] || null;
+        setRuniUser(exactMatch);
+      })
+      .catch(() => setRuniUser(null));
   }, []);
 
   const startEditing = () => {
@@ -301,6 +310,16 @@ export default function Home({ user }) {
                 position: "relative",
               }}
             >
+              {(page.hero.showLavender || page.hero.showFlowers) && (
+                <Stack direction="row" spacing={1.2} alignItems="flex-end" justifyContent="center" sx={{ width: "100%", minHeight: { xs: 58, md: 68 }, mb: { xs: -0.5, md: -1 } }}>
+                  {page.hero.showLavender && (
+                    <Box component="img" src={lavenderGif} alt="" sx={{ width: { xs: 66, md: 76 } }} />
+                  )}
+                  {page.hero.showFlowers && (
+                    <Box component="img" src={flowersGif} alt="" sx={{ width: { xs: 112, md: 132 } }} />
+                  )}
+                </Stack>
+              )}
               <Box
                 sx={{
                   width: "100%",
@@ -311,16 +330,6 @@ export default function Home({ user }) {
               >
                 <Box component="img" src={getPandaImage(page.hero.pandaImage)} alt={decodeDisplayText(page.hero.imageAlt)} sx={{ width: { xs: "68%", md: "74%" }, maxWidth: 292 }} />
               </Box>
-              {(page.hero.showLavender || page.hero.showFlowers) && (
-                <Stack direction="row" spacing={1.2} alignItems="flex-end" justifyContent="center" sx={{ width: "100%", minHeight: { xs: 58, md: 68 } }}>
-                  {page.hero.showLavender && (
-                    <Box component="img" src={lavenderGif} alt="" sx={{ width: { xs: 66, md: 76 } }} />
-                  )}
-                  {page.hero.showFlowers && (
-                    <Box component="img" src={flowersGif} alt="" sx={{ width: { xs: 112, md: 132 } }} />
-                  )}
-                </Stack>
-              )}
             </Stack>
           </Box>
 
@@ -336,23 +345,38 @@ export default function Home({ user }) {
           >
             {page.bubbles.map((item, index) => (
               <AnimatedSection key={`${item.title}-${index}`} delay={120 + index * 90} sx={{ width: "100%", height: "100%" }}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 3,
-                    width: "100%",
-                    height: "100%",
-                    borderTop: "3px solid",
-                    borderTopColor: "secondary.main",
-                    boxShadow: "0 18px 52px rgba(199, 146, 255, 0.16)",
-                  }}
-                >
-                  <Stack spacing={2} sx={{ height: "100%" }}>
-                    <Box sx={{ color: "secondary.main" }}><BubbleIcon type={item.icon} /></Box>
-                    <Typography variant="h4" sx={(theme) => ({ fontFamily: theme.typography.monoFontFamily })}>{decodeDisplayText(item.title)}</Typography>
-                    <Typography color="text.secondary" sx={{ fontSize: "1.02rem", lineHeight: 1.62 }}>{decodeDisplayText(item.text)}</Typography>
-                  </Stack>
-                </Paper>
+                <Stack spacing={1.6} alignItems="center" sx={{ height: "100%" }}>
+                  {index === 1 && runiUser && (
+                    <Box
+                      sx={{
+                        p: 0.9,
+                        borderRadius: "50%",
+                        border: "1px solid rgba(255, 204, 131, 0.42)",
+                        bgcolor: "rgba(255, 204, 131, 0.08)",
+                        boxShadow: "0 16px 42px rgba(255, 204, 131, 0.14)",
+                      }}
+                    >
+                      <UserAvatar user={runiUser} size={92} />
+                    </Box>
+                  )}
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      p: 3,
+                      width: "100%",
+                      flex: 1,
+                      borderTop: "3px solid",
+                      borderTopColor: "secondary.main",
+                      boxShadow: "0 18px 52px rgba(199, 146, 255, 0.16)",
+                    }}
+                  >
+                    <Stack spacing={2} sx={{ height: "100%" }}>
+                      <Box sx={{ color: "secondary.main" }}><BubbleIcon type={item.icon} /></Box>
+                      <Typography variant="h4" sx={(theme) => ({ fontFamily: theme.typography.monoFontFamily })}>{decodeDisplayText(item.title)}</Typography>
+                      <Typography color="text.secondary" sx={{ fontSize: "1.02rem", lineHeight: 1.62 }}>{decodeDisplayText(item.text)}</Typography>
+                    </Stack>
+                  </Paper>
+                </Stack>
               </AnimatedSection>
             ))}
           </Box>
