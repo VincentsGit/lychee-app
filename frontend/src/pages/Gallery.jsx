@@ -298,10 +298,15 @@ export default function Gallery({ user }) {
           width: "100%",
           maxWidth: { xs: "100%", lg: 1080 },
           mx: "auto",
-          display: "flex",
-          flexWrap: "wrap",
-          justifyContent: "center",
+          alignSelf: "center",
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "repeat(2, minmax(0, 1fr))",
+            sm: "repeat(3, minmax(0, 1fr))",
+            lg: "repeat(4, minmax(0, 1fr))",
+          },
           gap: { xs: 0.55, sm: 0.85, md: 1.15 },
+          justifyItems: "stretch",
           alignItems: "stretch",
         }}
       >
@@ -309,15 +314,7 @@ export default function Gallery({ user }) {
           <AnimatedSection
             key={photo.id}
             delay={80 + (index % 12) * 24}
-            sx={{
-              minWidth: 0,
-              flex: {
-                xs: "0 1 calc(50% - 6px)",
-                sm: "0 1 calc(33.333% - 10px)",
-                lg: "0 1 calc(25% - 14px)",
-              },
-              maxWidth: { xs: "calc(50% - 6px)", sm: "calc(33.333% - 10px)", lg: "calc(25% - 14px)" },
-            }}
+            sx={{ minWidth: 0, width: "100%" }}
           >
             <PhotoCard photo={photo} canEdit={canEdit} onEdit={startEdit} onDelete={deletePhoto} onOpen={setActivePhoto} />
           </AnimatedSection>
