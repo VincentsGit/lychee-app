@@ -116,31 +116,78 @@ function AppShell() {
     navigate("/");
   };
 
-  const navItems = [
-    { label: "Home", to: "/" },
-    { label: "About", to: "/about" },
-    { label: "Blog", to: "/blog" },
-    { label: "Travel", to: "/travel" },
-    { label: "Watchlist", to: "/watchlist" },
-    { label: "Spotify", to: "/spotify" },
-    { label: "Games", to: "/games" },
-    { label: "Socials", to: "/socials" },
+  const navSections = [
+    {
+      label: "Start",
+      items: [
+        { label: "Home", to: "/" },
+        { label: "About", to: "/about" },
+      ],
+    },
+    {
+      label: "Runi's pages",
+      items: [
+        { label: "Blog", to: "/blog" },
+        { label: "Travel", to: "/travel" },
+        { label: "Watchlist", to: "/watchlist" },
+      ],
+    },
+    {
+      label: "Extras",
+      items: [
+        { label: "Spotify", to: "/spotify" },
+        { label: "Games", to: "/games" },
+        { label: "Socials", to: "/socials" },
+      ],
+    },
   ];
 
   const sidebarButtonSx = {
     justifyContent: "flex-start",
     width: "100%",
-    px: 2,
-    py: { xs: 0.95, md: 1.08, lg: 1.15 },
-    minHeight: { xs: 42, md: 46, lg: 48 },
+    px: 1.65,
+    py: { xs: 0.9, md: 0.98, lg: 1.05 },
+    minHeight: { xs: 40, md: 42, lg: 44 },
+    borderRadius: 3,
+    color: "text.primary",
     fontSize: { xs: "0.9rem", md: "0.98rem", lg: "1.05rem" },
     letterSpacing: "0.025em",
     lineHeight: 1.2,
+    opacity: 0.95,
+    transition: "color 180ms ease, background-color 180ms ease, transform 180ms ease",
+    "&:hover": {
+      bgcolor: "rgba(255, 204, 131, 0.10)",
+      color: "secondary.main",
+      transform: "translateX(2px)",
+    },
   };
 
-  const nav = (
-    <Stack spacing={{ xs: 1, md: 1.05 }}>
-      {navItems.map((item) => (
+  const sidebarSectionSx = {
+    p: 1,
+    border: "1px solid",
+    borderColor: (currentTheme) => currentTheme.palette.mode === "dark" ? "rgba(155, 93, 229, 0.24)" : "rgba(139, 92, 246, 0.18)",
+    borderRadius: 4,
+    bgcolor: (currentTheme) => currentTheme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.025)" : "rgba(139, 92, 246, 0.055)",
+    boxShadow: (currentTheme) => currentTheme.palette.mode === "dark" ? "0 12px 32px rgba(0, 0, 0, 0.14)" : "0 12px 32px rgba(87, 63, 130, 0.08)",
+  };
+
+  const sectionLabelSx = {
+    display: "block",
+    px: 1.45,
+    pt: 0.35,
+    pb: 0.8,
+    color: "text.secondary",
+    fontFamily: (currentTheme) => currentTheme.typography.monoFontFamily,
+    fontSize: { xs: "0.66rem", md: "0.69rem", lg: "0.72rem" },
+    fontWeight: 900,
+    letterSpacing: "0.14em",
+    lineHeight: 1,
+    textTransform: "uppercase",
+  };
+
+  const renderNavLinks = (items) => (
+    <Stack spacing={0.55}>
+      {items.map((item) => (
         <Button
           key={item.to}
           component={RouterLink}
@@ -151,22 +198,33 @@ function AppShell() {
           {item.label}
         </Button>
       ))}
-      {user?.username === "runitrench" && (
-        <Button
-          component={RouterLink}
-          to="/create"
-          startIcon={<CreateIcon />}
-          onClick={() => setMobileOpen(false)}
-          sx={sidebarButtonSx}
-        >
-          Create
-        </Button>
-      )}
     </Stack>
   );
 
+  const renderSidebarSection = (label, children, sx = {}) => (
+    <Box sx={{ ...sidebarSectionSx, ...sx }}>
+      <Typography variant="caption" sx={sectionLabelSx}>{label}</Typography>
+      {children}
+    </Box>
+  );
+
+  const ownerTools = user?.username === "runitrench" ? renderSidebarSection(
+    "Runi tools",
+    <Stack spacing={0.55}>
+      <Button
+        component={RouterLink}
+        to="/create"
+        startIcon={<CreateIcon />}
+        onClick={() => setMobileOpen(false)}
+        sx={sidebarButtonSx}
+      >
+        Create
+      </Button>
+    </Stack>
+  ) : null;
+
   const account = user ? (
-    <Stack spacing={{ xs: 1, md: 1.05 }}>
+    <Stack spacing={0.55}>
       <Button
         component={RouterLink}
         to={`/users/${user.id}`}
@@ -190,7 +248,7 @@ function AppShell() {
       </Button>
     </Stack>
   ) : (
-    <Stack spacing={{ xs: 1, md: 1.05 }}>
+    <Stack spacing={0.55}>
       <Button component={RouterLink} to="/login" onClick={() => setMobileOpen(false)} sx={sidebarButtonSx}>
         Login
       </Button>
@@ -201,23 +259,39 @@ function AppShell() {
   );
 
   const drawer = (
-    <Box sx={{ p: { xs: 2.5, md: 2.25 }, height: "100%", display: "flex", flexDirection: "column", gap: { xs: 3, md: 2.6 } }}>
-      <Stack direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
-        <MUILink component={RouterLink} to="/" underline="none" color="inherit" onClick={() => setMobileOpen(false)} sx={{ display: "flex", alignItems: "center", gap: 1.5, minWidth: 0 }}>
-          <Box component="img" src={PandaIcon} alt="lychee" sx={{ width: 42, height: 42, flexShrink: 0 }} />
-          <Box sx={{ minWidth: 0 }}>
-            <Typography variant="h5" lineHeight={1}>lychee</Typography>
-            <Typography variant="caption" color="text.secondary">my little site</Typography>
-            <SystemClock />
-          </Box>
-        </MUILink>
-        <IconButton onClick={() => setMode((prev) => (prev === "light" ? "dark" : "light"))} aria-label="Toggle colour mode">
-          {mode === "light" ? <DarkModeIcon /> : <LightModeIcon />}
-        </IconButton>
+    <Box sx={{ p: { xs: 2.5, md: 2.25 }, height: "100%", display: "flex", flexDirection: "column", gap: { xs: 2.15, md: 1.85 }, overflowY: "auto" }}>
+      <Box
+        sx={{
+          p: 1.35,
+          border: "1px solid",
+          borderColor: "rgba(255, 204, 131, 0.22)",
+          borderRadius: 4,
+          bgcolor: "rgba(255, 204, 131, 0.045)",
+          boxShadow: "0 14px 36px rgba(0, 0, 0, 0.12)",
+        }}
+      >
+        <Stack direction="row" spacing={1.35} alignItems="center" justifyContent="space-between">
+          <MUILink component={RouterLink} to="/" underline="none" color="inherit" onClick={() => setMobileOpen(false)} sx={{ display: "flex", alignItems: "center", gap: 1.35, minWidth: 0, flex: 1 }}>
+            <Box component="img" src={PandaIcon} alt="lychee" sx={{ width: 42, height: 42, flexShrink: 0 }} />
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="h5" lineHeight={1}>lychee</Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", whiteSpace: "nowrap" }}>my little site</Typography>
+              <SystemClock />
+            </Box>
+          </MUILink>
+          <IconButton onClick={() => setMode((prev) => (prev === "light" ? "dark" : "light"))} aria-label="Toggle colour mode" sx={{ flexShrink: 0 }}>
+            {mode === "light" ? <DarkModeIcon /> : <LightModeIcon />}
+          </IconButton>
+        </Stack>
+      </Box>
+
+      <Stack spacing={1.15}>
+        {navSections.map((section) => renderSidebarSection(section.label, renderNavLinks(section.items)))}
+        {ownerTools}
       </Stack>
-      {nav}
-      <Box sx={{ flex: 1 }} />
-      {account}
+
+      <Box sx={{ flex: 1, minHeight: 10 }} />
+      {renderSidebarSection("Account", account, { mb: 0.25 })}
     </Box>
   );
 
