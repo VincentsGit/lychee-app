@@ -37,16 +37,7 @@ export default function User() {
         </Paper>
       </AnimatedSection>
 
-      <AnimatedSection delay={100}>
-        <Paper elevation={0} sx={{ p: { xs: 3, md: 4 } }}>
-          <Typography variant="h2" color="blog.subheading">About me</Typography>
-          <Typography sx={{ mt: 2, whiteSpace: "pre-wrap" }} color={profile.aboutMe ? "text.primary" : "text.secondary"}>
-            {decodeDisplayText(profile.aboutMe) || "Nothing here yet."}
-          </Typography>
-        </Paper>
-      </AnimatedSection>
-
-      <AnimatedSection delay={180}>
+      <AnimatedSection delay={120}>
         <Paper elevation={0} sx={{ p: { xs: 3, md: 4 } }}>
           <Typography variant="h2" color="blog.subheading">Recent comment</Typography>
           {profile.recentComment ? (

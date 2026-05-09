@@ -296,16 +296,29 @@ export default function Gallery({ user }) {
       <Box
         sx={{
           width: "100%",
-          maxWidth: { xs: "100%", md: 980 },
+          maxWidth: { xs: "100%", lg: 1080 },
           mx: "auto",
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          display: "flex",
+          flexWrap: "wrap",
+          justifyContent: "center",
           gap: { xs: 0.55, sm: 0.85, md: 1.15 },
           alignItems: "stretch",
         }}
       >
         {photos.map((photo, index) => (
-          <AnimatedSection key={photo.id} delay={80 + (index % 9) * 28} sx={{ minWidth: 0 }}>
+          <AnimatedSection
+            key={photo.id}
+            delay={80 + (index % 12) * 24}
+            sx={{
+              minWidth: 0,
+              flex: {
+                xs: "0 1 calc(50% - 6px)",
+                sm: "0 1 calc(33.333% - 10px)",
+                lg: "0 1 calc(25% - 14px)",
+              },
+              maxWidth: { xs: "calc(50% - 6px)", sm: "calc(33.333% - 10px)", lg: "calc(25% - 14px)" },
+            }}
+          >
             <PhotoCard photo={photo} canEdit={canEdit} onEdit={startEdit} onDelete={deletePhoto} onOpen={setActivePhoto} />
           </AnimatedSection>
         ))}

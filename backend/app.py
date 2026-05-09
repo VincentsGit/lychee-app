@@ -351,10 +351,12 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             post_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
+            parent_id INTEGER,
             content TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (post_id) REFERENCES posts(id),
-            FOREIGN KEY (user_id) REFERENCES users(id)
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (parent_id) REFERENCES comments(id)
         )
         """
     )
@@ -524,11 +526,14 @@ def init_db():
     db.execute("UPDATE travel_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
     db.execute("UPDATE watchlist_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)")
     db.execute("UPDATE gallery_photos SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)")
+    if not column_exists(db, "comments", "parent_id"):
+        db.execute("ALTER TABLE comments ADD COLUMN parent_id INTEGER")
     db.execute("UPDATE concert_events SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP), status = COALESCE(NULLIF(status, ''), 'upcoming')")
     db.execute("UPDATE concert_wishlist SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)")
     for statement in [
         "CREATE INDEX IF NOT EXISTS idx_posts_category_created ON posts(category, created_at DESC)",
-        "CREATE INDEX IF NOT EXISTS idx_comments_post_created ON comments(post_id, created_at ASC)",
+        "CREATE INDEX IF NOT EXISTS idx_comments_post_created ON comments(post_id, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_comments_parent_created ON comments(parent_id, created_at ASC)",
         "CREATE INDEX IF NOT EXISTS idx_travel_items_plan_order ON travel_items(plan_id, sort_order ASC, id ASC)",
         "CREATE INDEX IF NOT EXISTS idx_watchlist_status_updated ON watchlist_items(is_watched ASC, updated_at DESC, id DESC)",
         "CREATE INDEX IF NOT EXISTS idx_gallery_created ON gallery_photos(created_at DESC, id DESC)",
@@ -1636,21 +1641,24 @@ def update_post(post_id):
 
 @app.route("/posts/<int:post_id>/comments", methods=["GET"])
 def get_comments(post_id):
+    sort = (request.args.get("sort") or "newest").lower()
+    direction = "ASC" if sort == "oldest" else "DESC"
     db = get_db()
     comments = db.execute(
-        """
-        SELECT comments.id, comments.content, comments.created_at,
+        f"""
+        SELECT comments.id, comments.parent_id, comments.content, comments.created_at,
                users.id AS user_id, users.username, users.display_name, users.avatar_url
         FROM comments
         JOIN users ON users.id = comments.user_id
         WHERE comments.post_id = ?
-        ORDER BY comments.created_at ASC
+        ORDER BY comments.created_at {direction}, comments.id {direction}
         """,
         (post_id,),
     ).fetchall()
     return jsonify([
         {
             "id": comment["id"],
+            "parentId": comment["parent_id"],
             "content": comment["content"],
             "createdAt": comment["created_at"],
             "user": {
@@ -1669,7 +1677,7 @@ def create_comment(post_id):
     user = current_user()
     if not user:
         return {"error": "Unauthorized"}, 401
-    data = request.get_json()
+    data = request.get_json() or {}
     content = (data.get("content") or "").strip()
     if not content:
         return {"error": "Comment cannot be empty"}, 400
@@ -1677,12 +1685,28 @@ def create_comment(post_id):
     post = db.execute("SELECT id FROM posts WHERE id = ?", (post_id,)).fetchone()
     if not post:
         return {"error": "Post not found"}, 404
+
+    parent_id = data.get("parentId") or data.get("parent_id")
+    if parent_id in ("", 0, "0"):
+        parent_id = None
+    if parent_id is not None:
+        try:
+            parent_id = int(parent_id)
+        except (TypeError, ValueError):
+            return {"error": "Reply target is invalid"}, 400
+        parent = db.execute(
+            "SELECT id FROM comments WHERE id = ? AND post_id = ?",
+            (parent_id, post_id),
+        ).fetchone()
+        if not parent:
+            return {"error": "Reply target not found"}, 404
+
     cursor = db.execute(
-        "INSERT INTO comments (post_id, user_id, content) VALUES (?, ?, ?)",
-        (post_id, user["id"], content[:1200]),
+        "INSERT INTO comments (post_id, user_id, parent_id, content) VALUES (?, ?, ?, ?)",
+        (post_id, user["id"], parent_id, content[:1200]),
     )
     db.commit()
-    return jsonify({"success": True, "id": cursor.lastrowid}), 201
+    return jsonify({"success": True, "id": cursor.lastrowid, "parentId": parent_id}), 201
 
 
 @app.route("/home", methods=["GET"])

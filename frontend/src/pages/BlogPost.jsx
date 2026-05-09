@@ -1,26 +1,62 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
+import ReplyIcon from "@mui/icons-material/Reply";
 import SendIcon from "@mui/icons-material/Send";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
-import { Alert, Box, Button, CircularProgress, Divider, Paper, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, CircularProgress, Divider, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
 import AnimatedSection from "../components/AnimatedSection";
 import BlogPostContent from "../components/BlogPostContent";
 import UserAvatar from "../components/UserAvatar";
 import { api } from "../components/api";
 import { decodeDisplayText } from "../components/displayText";
 
+function commentTime(comment) {
+  return new Date(comment.createdAt).getTime() || 0;
+}
+
+function buildCommentTree(comments, sortOrder) {
+  const items = comments.map((comment) => ({ ...comment, children: [] }));
+  const byId = new Map(items.map((comment) => [comment.id, comment]));
+  const roots = [];
+
+  items.forEach((comment) => {
+    const parent = comment.parentId ? byId.get(comment.parentId) : null;
+    if (parent) parent.children.push(comment);
+    else roots.push(comment);
+  });
+
+  const direction = sortOrder === "oldest" ? 1 : -1;
+  const directCompare = (a, b) => direction * (commentTime(a) - commentTime(b)) || direction * (a.id - b.id);
+  const activityTime = (comment) => Math.max(commentTime(comment), ...comment.children.map(activityTime));
+
+  roots.sort(sortOrder === "oldest"
+    ? directCompare
+    : (a, b) => (activityTime(b) - activityTime(a)) || (commentTime(b) - commentTime(a)) || (b.id - a.id));
+
+  const sortReplies = (comment) => {
+    comment.children.sort(directCompare);
+    comment.children.forEach(sortReplies);
+  };
+  roots.forEach(sortReplies);
+  return roots;
+}
+
 export default function BlogPost({ user }) {
   const { postId } = useParams();
   const navigate = useNavigate();
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
+  const [sortOrder, setSortOrder] = useState("newest");
   const [comment, setComment] = useState("");
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const canEdit = user?.username === "runitrench";
 
-  const loadComments = useCallback(() => api(`/api/posts/${postId}/comments`).then(setComments), [postId]);
+  const loadComments = useCallback(() => api(`/api/posts/${postId}/comments?sort=${sortOrder}`).then(setComments), [postId, sortOrder]);
+  const commentTree = useMemo(() => buildCommentTree(comments, sortOrder), [comments, sortOrder]);
 
   useEffect(() => {
     Promise.all([
@@ -31,16 +67,31 @@ export default function BlogPost({ user }) {
       .finally(() => setLoading(false));
   }, [postId, loadComments]);
 
+  const createComment = async ({ content, parentId = null }) => {
+    setError("");
+    await api(`/api/posts/${postId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ content, parentId }),
+    });
+    await loadComments();
+  };
+
   const submitComment = async (event) => {
     event.preventDefault();
-    setError("");
     try {
-      await api(`/api/posts/${postId}/comments`, {
-        method: "POST",
-        body: JSON.stringify({ content: comment }),
-      });
+      await createComment({ content: comment });
       setComment("");
-      await loadComments();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const submitReply = async (event, parentId) => {
+    event.preventDefault();
+    try {
+      await createComment({ content: replyText, parentId });
+      setReplyText("");
+      setReplyingTo(null);
     } catch (err) {
       setError(err.message);
     }
@@ -54,6 +105,70 @@ export default function BlogPost({ user }) {
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const CommentItem = ({ item, depth = 0 }) => {
+    const isReplying = replyingTo === item.id;
+    const displayName = decodeDisplayText(item.user.displayName);
+    const indent = Math.min(depth, 4);
+
+    return (
+      <Box sx={{ ml: { xs: indent ? 1.5 : 0, sm: indent * 3 }, pl: indent ? 1.5 : 0, borderLeft: indent ? "1px solid rgba(205, 180, 255, 0.22)" : "none" }}>
+        <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
+          <UserAvatar user={item.user} />
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "baseline" }}>
+              <Button component={RouterLink} to={`/users/${item.user.id}`} sx={{ p: 0, minWidth: 0, fontWeight: 800 }}>
+                {displayName}
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                {new Date(item.createdAt).toLocaleString()}
+              </Typography>
+            </Stack>
+            <Typography sx={{ mt: 0.5, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{decodeDisplayText(item.content)}</Typography>
+            {user && (
+              <Button
+                size="small"
+                startIcon={<ReplyIcon />}
+                onClick={() => {
+                  setReplyingTo(isReplying ? null : item.id);
+                  setReplyText("");
+                }}
+                sx={{ mt: 0.75, px: 0, minWidth: 0 }}
+              >
+                Reply
+              </Button>
+            )}
+            {isReplying && user && (
+              <Box component="form" onSubmit={(event) => submitReply(event, item.id)} sx={{ mt: 1.25 }}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="flex-start">
+                  <TextField
+                    value={replyText}
+                    onChange={(event) => setReplyText(event.target.value)}
+                    placeholder={`Reply to ${displayName}...`}
+                    multiline
+                    minRows={2}
+                    fullWidth
+                    inputProps={{ maxLength: 1200 }}
+                  />
+                  <Stack direction="row" spacing={1}>
+                    <Button type="submit" variant="contained" endIcon={<SendIcon />} disabled={!replyText.trim()}>
+                      Reply
+                    </Button>
+                    <Button onClick={() => { setReplyingTo(null); setReplyText(""); }}>Cancel</Button>
+                  </Stack>
+                </Stack>
+              </Box>
+            )}
+          </Box>
+        </Box>
+        {item.children.length > 0 && (
+          <Stack spacing={2} sx={{ mt: 2 }}>
+            {item.children.map((child) => <CommentItem key={child.id} item={child} depth={depth + 1} />)}
+          </Stack>
+        )}
+      </Box>
+    );
   };
 
   if (loading) {
@@ -135,10 +250,22 @@ export default function BlogPost({ user }) {
       <AnimatedSection delay={120}>
         <Paper elevation={0} sx={{ p: { xs: 3, md: 4 } }}>
           <Stack spacing={3}>
-            <Box>
-              <Typography variant="h2" color="blog.subheading">Comments</Typography>
-              <Typography color="text.secondary">{comments.length} messages on this post</Typography>
-            </Box>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }} justifyContent="space-between">
+              <Box>
+                <Typography variant="h2" color="blog.subheading">Comments</Typography>
+                <Typography color="text.secondary">{comments.length} messages on this post</Typography>
+              </Box>
+              <TextField
+                select
+                label="Sort comments"
+                value={sortOrder}
+                onChange={(event) => setSortOrder(event.target.value)}
+                sx={{ width: { xs: "100%", sm: 190 } }}
+              >
+                <MenuItem value="newest">Newest first</MenuItem>
+                <MenuItem value="oldest">Oldest first</MenuItem>
+              </TextField>
+            </Stack>
 
             {error && <Alert severity="error">{error}</Alert>}
 
@@ -168,23 +295,8 @@ export default function BlogPost({ user }) {
 
             <Divider />
 
-            <Stack spacing={2}>
-              {comments.map((item) => (
-                <Box key={item.id} sx={{ display: "flex", gap: 2 }}>
-                  <UserAvatar user={item.user} />
-                  <Box sx={{ flex: 1 }}>
-                    <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "baseline" }}>
-                      <Button component={RouterLink} to={`/users/${item.user.id}`} sx={{ p: 0, minWidth: 0, fontWeight: 800 }}>
-                        {decodeDisplayText(item.user.displayName)}
-                      </Button>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(item.createdAt).toLocaleString()}
-                      </Typography>
-                    </Stack>
-                    <Typography sx={{ whiteSpace: "pre-wrap" }}>{decodeDisplayText(item.content)}</Typography>
-                  </Box>
-                </Box>
-              ))}
+            <Stack spacing={2.5}>
+              {commentTree.map((item) => <CommentItem key={item.id} item={item} />)}
               {!comments.length && <Typography color="text.secondary">No comments yet.</Typography>}
             </Stack>
           </Stack>

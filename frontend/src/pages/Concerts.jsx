@@ -390,6 +390,22 @@ export default function Concerts({ user }) {
                 A little tracker for past shows, upcoming concerts, and artists Runi wants to see.
               </Typography>
             </Box>
+            <Stack direction="row" spacing={{ xs: 3, sm: 5, md: 7 }} useFlexGap flexWrap="wrap">
+              {[
+                [String(pastShows.length), "Past"],
+                [String(upcomingShows.length), "Upcoming"],
+                [String(wishlist.length), "Wishlist"],
+              ].map(([number, label]) => (
+                <Box key={label} sx={{ minWidth: 76 }}>
+                  <Box component="span" sx={{ display: "block", fontFamily: '"Playfair Display", Georgia, serif', fontSize: { xs: "1.8rem", sm: "2.2rem" }, lineHeight: 1, color: "#fff7ec" }}>
+                    {number}
+                  </Box>
+                  <Box component="span" sx={{ display: "block", mt: 0.35, color: "rgba(221, 213, 239, 0.66)", fontFamily: monoFont, fontSize: "0.66rem", fontWeight: 900, letterSpacing: "0.14em", textTransform: "uppercase" }}>
+                    {label}
+                  </Box>
+                </Box>
+              ))}
+            </Stack>
             {canEdit && (
               <Button variant="contained" startIcon={<EditIcon />} onClick={scrollToEditor} sx={{ alignSelf: "flex-start" }}>
                 Edit concerts
@@ -431,59 +447,6 @@ export default function Concerts({ user }) {
         </Box>
       )}
 
-      <AnimatedSection delay={60} sx={{ width: "100%", maxWidth: 820 }}>
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 3, sm: 4, md: 5 },
-            borderRadius: 2.5,
-            background: "rgba(36, 31, 53, 0.72)",
-          }}
-        >
-          <Typography
-            sx={{
-              color: "rgba(221, 213, 239, 0.68)",
-              fontFamily: monoFont,
-              fontSize: "0.72rem",
-              fontWeight: 900,
-              letterSpacing: "0.18em",
-              textTransform: "uppercase",
-              mb: 0.8,
-            }}
-          >
-            Concert Tracker
-          </Typography>
-          <Box
-            component="h1"
-            sx={{
-              m: 0,
-              fontFamily: '"Playfair Display", Georgia, serif',
-              fontSize: "clamp(3rem, 9vw, 5rem)",
-              fontWeight: 400,
-              lineHeight: 0.98,
-              letterSpacing: "-0.04em",
-            }}
-          >
-            My <Box component="em" sx={{ color: "text.secondary", fontStyle: "italic" }}>Shows</Box>
-          </Box>
-          <Stack direction="row" spacing={{ xs: 4, md: 7 }} useFlexGap flexWrap="wrap" sx={{ mt: 3 }}>
-            {[
-              [String(pastShows.length), "Past"],
-              [String(upcomingShows.length), "Upcoming"],
-              [String(wishlist.length), "Wishlist"],
-            ].map(([number, label]) => (
-              <Box key={label} sx={{ minWidth: 86 }}>
-                <Box component="span" sx={{ display: "block", fontFamily: '"Playfair Display", Georgia, serif', fontSize: "2.2rem", lineHeight: 1, color: "#fff7ec" }}>
-                  {number}
-                </Box>
-                <Box component="span" sx={{ display: "block", mt: 0.3, color: "rgba(221, 213, 239, 0.66)", fontFamily: monoFont, fontSize: "0.66rem", fontWeight: 900, letterSpacing: "0.14em", textTransform: "uppercase" }}>
-                  {label}
-                </Box>
-              </Box>
-            ))}
-          </Stack>
-        </Paper>
-      </AnimatedSection>
 
       <Box sx={{ width: "100%", maxWidth: 820 }}>
         <AnimatedSection delay={100}>
