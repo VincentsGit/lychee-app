@@ -1693,6 +1693,35 @@ def delete_account():
     return resp
 
 
+@app.route("/users/search", methods=["GET"])
+def search_users():
+    raw_query = (request.args.get("username") or request.args.get("q") or "").strip()
+    username = raw_query.lstrip("@").strip()
+    username = re.sub(r"[^A-Za-z0-9_]", "", username)[:24]
+    if not username:
+        return jsonify({"query": "", "users": []})
+
+    needle = username.lower()
+    db = get_db()
+    users = db.execute(
+        """
+        SELECT id, username, display_name, about_me, avatar_url, created_at
+        FROM users
+        WHERE lower(username) LIKE ?
+        ORDER BY
+            CASE
+                WHEN lower(username) = ? THEN 0
+                WHEN lower(username) LIKE ? THEN 1
+                ELSE 2
+            END,
+            lower(username) ASC
+        LIMIT 20
+        """,
+        (f"%{needle}%", needle, f"{needle}%"),
+    ).fetchall()
+    return jsonify({"query": username, "users": [row_to_user(user) for user in users]})
+
+
 @app.route("/users/<int:user_id>", methods=["GET"])
 def get_user(user_id):
     db = get_db()

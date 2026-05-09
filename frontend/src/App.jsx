@@ -88,6 +88,7 @@ const Spotify = lazy(() => import("./pages/Spotify"));
 const SteamSavings = lazy(() => import("./pages/SteamSavings"));
 const Travel = lazy(() => import("./pages/Travel"));
 const User = lazy(() => import("./pages/User"));
+const UserSearch = lazy(() => import("./pages/UserSearch"));
 const Watchlist = lazy(() => import("./pages/Watchlist"));
 
 function AppShell() {
@@ -125,6 +126,7 @@ function AppShell() {
     { label: "Spotify", to: "/spotify" },
     { label: "Games", to: "/games" },
     { label: "Socials", to: "/socials" },
+    { label: "Users", to: "/users" },
   ];
 
   const sidebarButtonSx = {
@@ -289,6 +291,7 @@ function AppShell() {
                 <Route path="/settings" element={<Settings user={user} refreshUser={refreshUser} />} />
                 <Route path="/games" element={<SteamSavings />} />
                 <Route path="/steam-savings" element={<SteamSavings />} />
+                <Route path="/users" element={<UserSearch />} />
                 <Route path="/users/:userId" element={<User />} />
               </Routes>
             </Suspense>
