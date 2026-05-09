@@ -349,6 +349,26 @@ def init_db():
         )
         """
     )
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS gallery_photos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            image_url TEXT NOT NULL,
+            caption TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    for statement in [
+        ("image_url", "ALTER TABLE gallery_photos ADD COLUMN image_url TEXT NOT NULL DEFAULT ''"),
+        ("caption", "ALTER TABLE gallery_photos ADD COLUMN caption TEXT DEFAULT ''"),
+        ("created_at", "ALTER TABLE gallery_photos ADD COLUMN created_at DATETIME"),
+        ("updated_at", "ALTER TABLE gallery_photos ADD COLUMN updated_at DATETIME"),
+    ]:
+        if not column_exists(db, "gallery_photos", statement[0]):
+            db.execute(statement[1])
     db.execute(
         """
         CREATE TABLE IF NOT EXISTS watchlist_items (
@@ -391,11 +411,13 @@ def init_db():
         db.execute("ALTER TABLE travel_items ADD COLUMN completed_at DATETIME")
     db.execute("UPDATE travel_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
     db.execute("UPDATE watchlist_items SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)")
+    db.execute("UPDATE gallery_photos SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)")
     for statement in [
         "CREATE INDEX IF NOT EXISTS idx_posts_category_created ON posts(category, created_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_comments_post_created ON comments(post_id, created_at ASC)",
         "CREATE INDEX IF NOT EXISTS idx_travel_items_plan_order ON travel_items(plan_id, sort_order ASC, id ASC)",
         "CREATE INDEX IF NOT EXISTS idx_watchlist_status_updated ON watchlist_items(is_watched ASC, updated_at DESC, id DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_gallery_created ON gallery_photos(created_at DESC, id DESC)",
         "CREATE INDEX IF NOT EXISTS idx_cookies_value ON cookies(cookie_value)",
         "CREATE INDEX IF NOT EXISTS idx_cookies_created ON cookies(created_at)",
     ]:
@@ -1245,6 +1267,27 @@ def delete_user_by_id(user_id):
     return user, None
 
 
+def gallery_photo_payload(photo):
+    return {
+        "id": photo["id"],
+        "imageUrl": photo["image_url"],
+        "caption": photo["caption"] or "",
+        "createdAt": photo["created_at"],
+        "updatedAt": photo["updated_at"],
+    }
+
+
+def save_gallery_image(file):
+    if not file or file.filename == "":
+        return None, ("Choose a photo first", 400)
+    if not file.filename.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".heic", ".heics", ".webp")):
+        return None, ("Invalid file type", 400)
+    filename = secrets.token_hex(16) + os.path.splitext(file.filename)[1].lower()
+    file_path = os.path.join(UPLOAD_FOLDER, filename)
+    file.save(file_path)
+    return f"/uploads/{filename}", None
+
+
 def upload_file_to_tmp(file):
     if file.filename == "":
         return None, ("No selected file", 400)
@@ -1691,6 +1734,89 @@ def delete_account():
     resp = make_response(jsonify({"success": True, "deletedUserId": deleted_user["id"]}))
     resp.set_cookie("session_id", "", expires=0)
     return resp
+
+
+@app.route("/gallery", methods=["GET"])
+def get_gallery_photos():
+    db = get_db()
+    photos = db.execute(
+        """
+        SELECT id, image_url, caption, created_at, updated_at
+        FROM gallery_photos
+        ORDER BY datetime(created_at) DESC, id DESC
+        """
+    ).fetchall()
+    return jsonify([gallery_photo_payload(photo) for photo in photos])
+
+
+@app.route("/gallery", methods=["POST"])
+def create_gallery_photo():
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    image_url, error = save_gallery_image(request.files.get("file"))
+    if error:
+        message, status = error
+        return {"error": message}, status
+    caption = (request.form.get("caption") or "").strip()[:500]
+    now = datetime.now()
+    db = get_db()
+    cursor = db.execute(
+        """
+        INSERT INTO gallery_photos (image_url, caption, created_at, updated_at)
+        VALUES (?, ?, ?, ?)
+        """,
+        (image_url, caption, now, now),
+    )
+    db.commit()
+    photo = db.execute("SELECT * FROM gallery_photos WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    return jsonify(gallery_photo_payload(photo)), 201
+
+
+@app.route("/gallery/<int:photo_id>", methods=["PUT"])
+def update_gallery_photo(photo_id):
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    db = get_db()
+    current = db.execute("SELECT * FROM gallery_photos WHERE id = ?", (photo_id,)).fetchone()
+    if not current:
+        return {"error": "Photo not found"}, 404
+
+    if request.content_type and request.content_type.startswith("multipart/form-data"):
+        caption = (request.form.get("caption") or "").strip()[:500]
+        image_url = current["image_url"]
+        replacement = request.files.get("file")
+        if replacement and replacement.filename:
+            image_url, error = save_gallery_image(replacement)
+            if error:
+                message, status = error
+                return {"error": message}, status
+            delete_upload_path(current["image_url"])
+    else:
+        data = request.get_json(silent=True) or {}
+        caption = (data.get("caption") or "").strip()[:500]
+        image_url = current["image_url"]
+
+    db.execute(
+        "UPDATE gallery_photos SET image_url = ?, caption = ?, updated_at = ? WHERE id = ?",
+        (image_url, caption, datetime.now(), photo_id),
+    )
+    db.commit()
+    photo = db.execute("SELECT * FROM gallery_photos WHERE id = ?", (photo_id,)).fetchone()
+    return jsonify(gallery_photo_payload(photo))
+
+
+@app.route("/gallery/<int:photo_id>", methods=["DELETE"])
+def delete_gallery_photo(photo_id):
+    if not is_runitrench(current_user()):
+        return {"error": "Unauthorized"}, 401
+    db = get_db()
+    photo = db.execute("SELECT * FROM gallery_photos WHERE id = ?", (photo_id,)).fetchone()
+    if not photo:
+        return {"error": "Photo not found"}, 404
+    delete_upload_path(photo["image_url"])
+    db.execute("DELETE FROM gallery_photos WHERE id = ?", (photo_id,))
+    db.commit()
+    return jsonify({"success": True})
 
 
 @app.route("/users/search", methods=["GET"])

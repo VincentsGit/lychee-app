@@ -79,6 +79,7 @@ const Blog = lazy(() => import("./pages/Blog"));
 const BlogPost = lazy(() => import("./pages/BlogPost"));
 const Create = lazy(() => import("./pages/Create"));
 const EditPost = lazy(() => import("./pages/EditPost"));
+const Gallery = lazy(() => import("./pages/Gallery"));
 const Home = lazy(() => import("./pages/Home"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
@@ -122,6 +123,7 @@ function AppShell() {
     { label: "About", to: "/about" },
     { label: "Blog", to: "/blog" },
     { label: "Travel", to: "/travel" },
+    { label: "Gallery", to: "/gallery" },
     { label: "Watchlist", to: "/watchlist" },
     { label: "Spotify", to: "/spotify" },
     { label: "Games", to: "/games" },
@@ -280,6 +282,7 @@ function AppShell() {
                 <Route path="/blog" element={<Blog user={user} />} />
                 <Route path="/travel" element={<Travel user={user} />} />
                 <Route path="/travel/:planId" element={<Travel user={user} />} />
+                <Route path="/gallery" element={<Gallery user={user} />} />
                 <Route path="/watchlist" element={<Watchlist user={user} />} />
                 <Route path="/watchlist/:itemId" element={<Watchlist user={user} />} />
                 <Route path="/spotify" element={<Spotify user={user} />} />
