@@ -33,12 +33,24 @@ function extractImageUrls(html) {
 
 const AUTOSAVE_INTERVAL_MS = 60 * 1000;
 
+function toDatetimeLocalValue(value = new Date()) {
+  if (typeof value === "string") {
+    const match = value.trim().replace(" ", "T").match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+    if (match) return match[1];
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function EditPost() {
   const { postId } = useParams();
   const navigate = useNavigate();
   const theme = useTheme();
 
   const [title, setTitle] = useState("");
+  const [postDate, setPostDate] = useState("");
   const [loading, setLoading] = useState(true);
   const [isDirty, setIsDirty] = useState(false);
   const [originalImages, setOriginalImages] = useState([]);
@@ -103,6 +115,7 @@ export default function EditPost() {
         const data = await res.json();
         setTitle(data.title);
         setPostStatus(data.status || "published");
+        setPostDate(toDatetimeLocalValue(data.createdAt));
         editor?.commands.setContent(data.content);
 
         const imgs = extractImageUrls(data.content).filter(src =>
@@ -133,7 +146,7 @@ export default function EditPost() {
   const savePost = useCallback(async (status, removeUnusedImages = false) => {
     if (!editor) return;
     const content = editor.getHTML();
-    const updatedPost = { title, content, status };
+    const updatedPost = { title, content, status, createdAt: postDate };
 
     const currentImages = extractImageUrls(content).filter(src =>
       src.includes("/uploads/")
@@ -163,7 +176,7 @@ export default function EditPost() {
     setPostStatus(savedPost.status || status);
     setIsDirty(false);
     return savedPost;
-  }, [editor, originalImages, postId, title]);
+  }, [editor, originalImages, postDate, postId, title]);
 
   useEffect(() => {
     if (!editor || loading) return undefined;
@@ -223,6 +236,16 @@ export default function EditPost() {
                 fullWidth
                 required
                 margin="normal"
+              />
+              <TextField
+                label="Post date and time"
+                type="datetime-local"
+                value={postDate}
+                onChange={(e) => { setPostDate(e.target.value); setIsDirty(true); }}
+                fullWidth
+                margin="normal"
+                InputLabelProps={{ shrink: true }}
+                helperText="Change this to move the post into a different month or year on the Blog page."
               />
               <Alert severity={postStatus === "draft" ? "warning" : "info"} sx={{ mt: 2 }}>
                 {postStatus === "draft" ? "This post is still a draft. " : ""}{autosaveStatus}

@@ -91,7 +91,7 @@ export default function Blog({ user }) {
           py: 0.75,
         }}
       >
-        <Stack alignItems="flex-start" sx={{ minWidth: 0 }}>
+        <Stack alignItems="flex-start" spacing={0.45} sx={{ minWidth: 0 }}>
           <Typography fontWeight={800} sx={{ overflowWrap: "anywhere", wordBreak: "break-word" }}>
             {decodeDisplayText(post.title)}
           </Typography>

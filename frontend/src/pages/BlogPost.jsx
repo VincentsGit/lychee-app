@@ -251,7 +251,7 @@ export default function BlogPost({ user }) {
             >
               {decodeDisplayText(post.title)}
             </Typography>
-            <Typography color="text.secondary">
+            <Typography color="text.secondary" sx={{ mt: { xs: 1.25, md: 2 } }}>
               {new Date(post.createdAt).toLocaleString()}
             </Typography>
           </Box>

@@ -697,6 +697,30 @@ def normalise_post_payload(data):
     return title, content, status
 
 
+def normalise_post_timestamp(data, fallback=None):
+    raw = (
+        data.get("createdAt")
+        or data.get("created_at")
+        or data.get("publishedAt")
+        or data.get("timestamp")
+    )
+    if raw is None or str(raw).strip() == "":
+        return fallback, None
+
+    value = str(raw).strip().replace(" ", "T", 1)
+    if value.endswith("Z"):
+        value = f"{value[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None, "Use post timestamps in YYYY-MM-DDTHH:MM format"
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone().replace(tzinfo=None)
+    return parsed, None
+
+
 def spotify_embed_from_value(value):
     raw = (value or "").strip()
     if not raw:
@@ -1540,17 +1564,21 @@ def upload_post():
     db = get_db()
     data = request.get_json() or {}
     title, content, status = normalise_post_payload(data)
+    created_at, timestamp_error = normalise_post_timestamp(data, fallback=datetime.now())
+    if timestamp_error:
+        return jsonify({"error": timestamp_error}), 400
     if status == "published" and (not title or not content):
         return jsonify({"error": "Missing title or content"}), 400
     content = migrate_images(content)
     if status == "published":
         clear_tmp_uploads()
+    updated_at = datetime.now()
     cursor = db.execute(
         "INSERT INTO posts (title, content, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?)",
-        (title, content, datetime.now(), datetime.now(), status),
+        (title, content, created_at, updated_at, status),
     )
     db.commit()
-    return jsonify({"success": True, "id": cursor.lastrowid, "title": title, "status": status}), 201
+    return jsonify({"success": True, "id": cursor.lastrowid, "title": title, "status": status, "createdAt": created_at.isoformat(sep=" ")}), 201
 
 
 @app.route("/posts", methods=["GET"])
@@ -1624,19 +1652,30 @@ def update_post(post_id):
     db = get_db()
     data = request.get_json() or {}
     title, content, status = normalise_post_payload(data)
+    created_at, timestamp_error = normalise_post_timestamp(data)
+    if timestamp_error:
+        return jsonify({"error": timestamp_error}), 400
     if status == "published" and (not title or not content):
         return jsonify({"error": "Missing title or content"}), 400
     content = migrate_images(content)
     if status == "published":
         clear_tmp_uploads()
-    result = db.execute(
-        "UPDATE posts SET title = ?, content = ?, updated_at = ?, status = ? WHERE id = ?",
-        (title, content, datetime.now(), status, post_id),
-    )
+    updated_at = datetime.now()
+    if created_at is None:
+        result = db.execute(
+            "UPDATE posts SET title = ?, content = ?, updated_at = ?, status = ? WHERE id = ?",
+            (title, content, updated_at, status, post_id),
+        )
+    else:
+        result = db.execute(
+            "UPDATE posts SET title = ?, content = ?, created_at = ?, updated_at = ?, status = ? WHERE id = ?",
+            (title, content, created_at, updated_at, status, post_id),
+        )
     if result.rowcount == 0:
         return {"error": "Post not found"}, 404
     db.commit()
-    return jsonify({"success": True, "id": post_id, "title": title, "status": status}), 200
+    post = db.execute("SELECT created_at FROM posts WHERE id = ?", (post_id,)).fetchone()
+    return jsonify({"success": True, "id": post_id, "title": title, "status": status, "createdAt": post["created_at"]}), 200
 
 
 @app.route("/posts/<int:post_id>/comments", methods=["GET"])

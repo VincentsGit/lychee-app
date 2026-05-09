@@ -22,6 +22,17 @@ import EditorToolbar from "../components/EditorToolbar";
 
 const AUTOSAVE_INTERVAL_MS = 60 * 1000;
 
+function toDatetimeLocalValue(value = new Date()) {
+  if (typeof value === "string") {
+    const match = value.trim().replace(" ", "T").match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})/);
+    if (match) return match[1];
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (number) => String(number).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function Create() {
   const navigate = useNavigate();
   useEffect(() => {
@@ -40,6 +51,7 @@ export default function Create() {
   }, [navigate]);
   const theme = useTheme();
   const [title, setTitle] = useState("");
+  const [postDate, setPostDate] = useState(() => toDatetimeLocalValue());
   const [draftId, setDraftId] = useState(null);
   const [isDirty, setIsDirty] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState("Autosaves every minute");
@@ -124,7 +136,7 @@ export default function Create() {
     const hasDraftContent = title.trim() || editor.getText().trim() || content.includes("<img") || content.includes("iframe");
     if (status === "draft" && !hasDraftContent) return null;
 
-    const blogPost = { title, content, status };
+    const blogPost = { title, content, status, createdAt: postDate };
     const url = draftId ? `/api/posts/${draftId}` : "/api/posts";
     const method = draftId ? "PUT" : "POST";
 
@@ -142,7 +154,7 @@ export default function Create() {
     }
 
     return res.json();
-  }, [draftId, editor, title]);
+  }, [draftId, editor, postDate, title]);
 
   useEffect(() => {
     if (!editor) return undefined;
@@ -199,6 +211,16 @@ export default function Create() {
                 fullWidth
                 required
                 margin="normal"
+              />
+              <TextField
+                label="Post date and time"
+                type="datetime-local"
+                value={postDate}
+                onChange={(e) => { setPostDate(e.target.value); setIsDirty(true); }}
+                fullWidth
+                margin="normal"
+                InputLabelProps={{ shrink: true }}
+                helperText="Runi can set this manually to organise posts by any month or year."
               />
               <Alert severity="info" sx={{ mt: 2 }}>
                 {autosaveStatus}
