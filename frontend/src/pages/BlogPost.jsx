@@ -28,11 +28,8 @@ function buildCommentTree(comments, sortOrder) {
 
   const direction = sortOrder === "oldest" ? 1 : -1;
   const directCompare = (a, b) => direction * (commentTime(a) - commentTime(b)) || direction * (a.id - b.id);
-  const activityTime = (comment) => Math.max(commentTime(comment), ...comment.children.map(activityTime));
 
-  roots.sort(sortOrder === "oldest"
-    ? directCompare
-    : (a, b) => (activityTime(b) - activityTime(a)) || (commentTime(b) - commentTime(a)) || (b.id - a.id));
+  roots.sort(directCompare);
 
   const sortReplies = (comment) => {
     comment.children.sort(directCompare);

@@ -25,7 +25,6 @@ import {
 } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import AnimatedSection from "../components/AnimatedSection";
-import UserAvatar from "../components/UserAvatar";
 import { api } from "../components/api";
 import { decodeDisplayText } from "../components/displayText";
 import flowersGif from "../icons/flowers.gif";
@@ -33,6 +32,7 @@ import lavenderGif from "../icons/lavender.gif";
 import pandaStatic from "../icons/panda.png";
 import pandaBounce from "../icons/panda_menu.gif";
 import pandaDance from "../images/panda_dance.gif";
+import runiAvatarImage from "../images/runi_avatar_transparent.png";
 
 const defaultHome = {
   hero: {
@@ -86,6 +86,7 @@ const emptyBubble = {
   text: "",
 };
 
+
 function normaliseHome(data) {
   return {
     ...defaultHome,
@@ -108,7 +109,6 @@ function getPandaImage(type) {
 export default function Home({ user }) {
   const [page, setPage] = useState(defaultHome);
   const [draft, setDraft] = useState(defaultHome);
-  const [runiUser, setRuniUser] = useState(null);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
@@ -122,13 +122,6 @@ export default function Home({ user }) {
         setDraft(next);
       })
       .catch((err) => setError(err.message));
-
-    api("/api/users/search?username=runitrench")
-      .then((data) => {
-        const exactMatch = data.users?.find((item) => item.username === "runitrench") || data.users?.[0] || null;
-        setRuniUser(exactMatch);
-      })
-      .catch(() => setRuniUser(null));
   }, []);
 
   const startEditing = () => {
@@ -251,9 +244,13 @@ export default function Home({ user }) {
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 540px) minmax(300px, 390px)" },
-              columnGap: { xs: 0, lg: 5 },
-              rowGap: { xs: 4, lg: 0 },
+              gridTemplateColumns: {
+                xs: "1fr",
+                md: "minmax(0, 1fr) minmax(160px, 220px)",
+                lg: "minmax(0, 430px) minmax(160px, 210px) minmax(240px, 300px)",
+              },
+              columnGap: { xs: 0, md: 3, lg: 4 },
+              rowGap: { xs: 3, md: 4, lg: 0 },
               alignItems: "center",
               justifyContent: "center",
               width: "100%",
@@ -264,7 +261,7 @@ export default function Home({ user }) {
               alignItems={{ xs: "center", lg: "flex-start" }}
               sx={{
                 width: "100%",
-                maxWidth: { xs: 860, lg: 540 },
+                maxWidth: { xs: 860, lg: 430 },
                 mx: { xs: "auto", lg: 0 },
                 textAlign: { xs: "center", lg: "left" },
                 minWidth: 0,
@@ -296,6 +293,34 @@ export default function Home({ user }) {
               </Stack>
             </Stack>
 
+            <Box
+              sx={{
+                display: "grid",
+                placeItems: "center",
+                width: "100%",
+                maxWidth: { xs: 260, md: 220, lg: 210 },
+                minHeight: { xs: 180, md: 250, lg: 300 },
+                mx: "auto",
+                alignSelf: "center",
+                gridColumn: { xs: "1", md: "2", lg: "2" },
+                gridRow: { xs: "auto", md: "1", lg: "1" },
+              }}
+            >
+              <Box
+                component="img"
+                src={runiAvatarImage}
+                alt="Runi avatar"
+                sx={{
+                  display: "block",
+                  width: { xs: 168, sm: 190, md: 205 },
+                  maxWidth: "100%",
+                  height: "auto",
+                  objectFit: "contain",
+                  filter: "drop-shadow(0 24px 42px rgba(0, 0, 0, 0.28))",
+                }}
+              />
+            </Box>
+
             <Stack
               spacing={1.35}
               alignItems="center"
@@ -303,10 +328,12 @@ export default function Home({ user }) {
               sx={{
                 p: { xs: 1.5, md: 2.5 },
                 width: "100%",
-                maxWidth: { xs: 420, lg: 390 },
-                minHeight: { xs: 300, lg: 330 },
+                maxWidth: { xs: 360, md: 300 },
+                minHeight: { xs: 280, lg: 300 },
                 mx: { xs: "auto", lg: 0 },
                 justifySelf: { xs: "center", lg: "end" },
+                gridColumn: { xs: "1", md: "1 / span 2", lg: "3" },
+                gridRow: { xs: "auto", md: "2", lg: "1" },
                 position: "relative",
               }}
             >
@@ -323,7 +350,7 @@ export default function Home({ user }) {
               <Box
                 sx={{
                   width: "100%",
-                  minHeight: { xs: 206, md: 235 },
+                  minHeight: { xs: 145, md: 165 },
                   display: "grid",
                   placeItems: "center",
                 }}
@@ -345,38 +372,23 @@ export default function Home({ user }) {
           >
             {page.bubbles.map((item, index) => (
               <AnimatedSection key={`${item.title}-${index}`} delay={120 + index * 90} sx={{ width: "100%", height: "100%" }}>
-                <Stack spacing={1.6} alignItems="center" sx={{ height: "100%" }}>
-                  {index === 1 && runiUser && (
-                    <Box
-                      sx={{
-                        p: 0.9,
-                        borderRadius: "50%",
-                        border: "1px solid rgba(255, 204, 131, 0.42)",
-                        bgcolor: "rgba(255, 204, 131, 0.08)",
-                        boxShadow: "0 16px 42px rgba(255, 204, 131, 0.14)",
-                      }}
-                    >
-                      <UserAvatar user={runiUser} size={92} />
-                    </Box>
-                  )}
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3,
-                      width: "100%",
-                      flex: 1,
-                      borderTop: "3px solid",
-                      borderTopColor: "secondary.main",
-                      boxShadow: "0 18px 52px rgba(199, 146, 255, 0.16)",
-                    }}
-                  >
-                    <Stack spacing={2} sx={{ height: "100%" }}>
-                      <Box sx={{ color: "secondary.main" }}><BubbleIcon type={item.icon} /></Box>
-                      <Typography variant="h4" sx={(theme) => ({ fontFamily: theme.typography.monoFontFamily })}>{decodeDisplayText(item.title)}</Typography>
-                      <Typography color="text.secondary" sx={{ fontSize: "1.02rem", lineHeight: 1.62 }}>{decodeDisplayText(item.text)}</Typography>
-                    </Stack>
-                  </Paper>
-                </Stack>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 3,
+                    width: "100%",
+                    height: "100%",
+                    borderTop: "3px solid",
+                    borderTopColor: "secondary.main",
+                    boxShadow: "0 18px 52px rgba(199, 146, 255, 0.16)",
+                  }}
+                >
+                  <Stack spacing={2} sx={{ height: "100%" }}>
+                    <Box sx={{ color: "secondary.main" }}><BubbleIcon type={item.icon} /></Box>
+                    <Typography variant="h4" sx={(theme) => ({ fontFamily: theme.typography.monoFontFamily })}>{decodeDisplayText(item.title)}</Typography>
+                    <Typography color="text.secondary" sx={{ fontSize: "1.02rem", lineHeight: 1.62 }}>{decodeDisplayText(item.text)}</Typography>
+                  </Stack>
+                </Paper>
               </AnimatedSection>
             ))}
           </Box>

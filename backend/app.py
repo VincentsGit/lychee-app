@@ -2241,24 +2241,44 @@ def get_user(user_id):
     ).fetchone()
     if not user:
         return {"error": "User not found"}, 404
-    comment = db.execute(
+    comments = db.execute(
         """
-        SELECT comments.id, comments.content, comments.created_at, posts.id AS post_id, posts.title AS post_title
+        SELECT comments.id, comments.parent_id, comments.content, comments.created_at,
+               posts.id AS post_id, posts.title AS post_title,
+               parent_users.id AS parent_user_id,
+               parent_users.username AS parent_username,
+               parent_users.display_name AS parent_display_name,
+               parent_users.avatar_url AS parent_avatar_url,
+               parent_users.created_at AS parent_created_at
         FROM comments
         JOIN posts ON posts.id = comments.post_id
+        LEFT JOIN comments AS parent_comments ON parent_comments.id = comments.parent_id
+        LEFT JOIN users AS parent_users ON parent_users.id = parent_comments.user_id
         WHERE comments.user_id = ?
-        ORDER BY comments.created_at DESC
-        LIMIT 1
+        ORDER BY comments.created_at DESC, comments.id DESC
         """,
         (user_id,),
-    ).fetchone()
+    ).fetchall()
+    comment_payloads = [
+        {
+            "id": comment["id"],
+            "parentId": comment["parent_id"],
+            "content": comment["content"],
+            "createdAt": comment["created_at"],
+            "post": {"id": comment["post_id"], "title": comment["post_title"]},
+            "replyingTo": None if not comment["parent_user_id"] else {
+                "id": comment["parent_user_id"],
+                "username": comment["parent_username"],
+                "displayName": comment["parent_display_name"] or comment["parent_username"],
+                "avatarUrl": comment["parent_avatar_url"] or "",
+                "createdAt": comment["parent_created_at"],
+            },
+        }
+        for comment in comments
+    ]
     payload = row_to_user(user)
-    payload["recentComment"] = None if not comment else {
-        "id": comment["id"],
-        "content": comment["content"],
-        "createdAt": comment["created_at"],
-        "post": {"id": comment["post_id"], "title": comment["post_title"]},
-    }
+    payload["comments"] = comment_payloads
+    payload["recentComment"] = comment_payloads[0] if comment_payloads else None
     return jsonify(payload)
 
 
