@@ -59,10 +59,21 @@ function CommentItem({
       <Box sx={{ display: "flex", gap: { xs: 1, sm: 2 }, alignItems: "flex-start" }}>
         <UserAvatar user={item.user} size={36} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "baseline" }}>
-            <Button component={RouterLink} to={`/users/${item.user.id}`} sx={{ p: 0, minWidth: 0, fontWeight: 800 }}>
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 0.25, sm: 1 }} alignItems="flex-start">
+            <Typography
+              component={RouterLink}
+              to={`/users/${item.user.id}`}
+              sx={{
+                alignSelf: "flex-start",
+                color: "primary.main",
+                fontWeight: 800,
+                lineHeight: 1.2,
+                textDecoration: "none",
+                "&:hover": { color: "primary.light", textDecoration: "underline" },
+              }}
+            >
               {displayName}
-            </Button>
+            </Typography>
             <Typography variant="caption" color="text.secondary">
               {new Date(item.createdAt).toLocaleString()}
             </Typography>
