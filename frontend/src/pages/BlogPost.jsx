@@ -56,8 +56,8 @@ function CommentItem({
 
   return (
     <Box sx={{ ml: { xs: indent ? 1.5 : 0, sm: indent * 3 }, pl: indent ? 1.5 : 0, borderLeft: indent ? "1px solid rgba(205, 180, 255, 0.22)" : "none" }}>
-      <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start" }}>
-        <UserAvatar user={item.user} />
+      <Box sx={{ display: "flex", gap: { xs: 1, sm: 2 }, alignItems: "flex-start" }}>
+        <UserAvatar user={item.user} size={36} />
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "baseline" }}>
             <Button component={RouterLink} to={`/users/${item.user.id}`} sx={{ p: 0, minWidth: 0, fontWeight: 800 }}>
