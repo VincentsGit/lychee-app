@@ -1583,6 +1583,8 @@ def upload_post():
 
 @app.route("/posts", methods=["GET"])
 def get_posts():
+    user = current_user()
+    can_see_drafts = is_runitrench(user)
     db = get_db()
     posts = db.execute(
         """
@@ -1590,9 +1592,11 @@ def get_posts():
         FROM posts
         LEFT JOIN comments ON comments.post_id = posts.id
         WHERE posts.category = 'blog'
+          AND (? OR posts.status = 'published')
         GROUP BY posts.id
         ORDER BY posts.created_at DESC
-        """
+        """,
+        (1 if can_see_drafts else 0,),
     ).fetchall()
     return jsonify([
         {
@@ -1615,6 +1619,8 @@ def get_post(post_id):
         (post_id,),
     ).fetchone()
     if not post:
+        return jsonify({"error": "Post not found"}), 404
+    if post["status"] == "draft" and not is_runitrench(current_user()):
         return jsonify({"error": "Post not found"}), 404
     return jsonify({
         "id": post["id"],
