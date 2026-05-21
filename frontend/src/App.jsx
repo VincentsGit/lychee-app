@@ -92,12 +92,14 @@ const Travel = lazy(() => import("./pages/Travel"));
 const User = lazy(() => import("./pages/User"));
 const UserSearch = lazy(() => import("./pages/UserSearch"));
 const Watchlist = lazy(() => import("./pages/Watchlist"));
+const LegacyAppShell = lazy(() => import("./legacy/LegacyAppShell"));
 
 function AppShell() {
   const sidebarWidth = 256;
   const [mode, setMode] = useState("dark");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState(undefined);
+  const [siteMode, setSiteMode] = useState(() => localStorage.getItem("lycheeSiteMode") || "current");
   const navigate = useNavigate();
 
   const theme = useMemo(() => responsiveFontSizes(getTheme(mode)), [mode]);
@@ -115,6 +117,13 @@ function AppShell() {
   const logout = async () => {
     await fetch("/api/logout", { method: "POST", credentials: "include" });
     setUser(null);
+    setMobileOpen(false);
+    navigate("/");
+  };
+
+  const switchSiteMode = (nextMode) => {
+    localStorage.setItem("lycheeSiteMode", nextMode);
+    setSiteMode(nextMode);
     setMobileOpen(false);
     navigate("/");
   };
@@ -168,6 +177,9 @@ function AppShell() {
           Create
         </Button>
       )}
+      <Button variant="outlined" onClick={() => switchSiteMode("legacy")} sx={{ ...sidebarButtonSx, mt: 0.8 }}>
+        Switch to legacy
+      </Button>
     </Stack>
   );
 
@@ -230,6 +242,18 @@ function AppShell() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
+      {siteMode === "legacy" ? (
+        <Suspense fallback={<Typography color="text.secondary">Loading...</Typography>}>
+          <LegacyAppShell
+            mode={mode}
+            setMode={setMode}
+            user={user}
+            setUser={setUser}
+            logout={logout}
+            onSwitchToCurrent={() => switchSiteMode("current")}
+          />
+        </Suspense>
+      ) : (
       <Box sx={{ minHeight: "100vh" }}>
         <AppBar position="sticky" color="transparent" elevation={0} sx={{ display: { md: "none" }, backdropFilter: "blur(18px)" }}>
           <Toolbar sx={{ gap: 2, px: { xs: 2, md: 4 } }}>
@@ -304,6 +328,7 @@ function AppShell() {
           </Container>
         </Box>
       </Box>
+      )}
     </ThemeProvider>
   );
 }
