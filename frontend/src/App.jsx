@@ -75,6 +75,7 @@ function SystemClock() {
 }
 
 const About = lazy(() => import("./pages/About"));
+const Avalon = lazy(() => import("./pages/Avalon"));
 const Blog = lazy(() => import("./pages/Blog"));
 const BlogPost = lazy(() => import("./pages/BlogPost"));
 const Concerts = lazy(() => import("./pages/Concerts"));
@@ -136,6 +137,7 @@ function AppShell() {
     { label: "Travel", to: "/travel" },
     { label: "Gallery", to: "/gallery" },
     { label: "Watchlist", to: "/watchlist" },
+    { label: "Avalon", to: "/avalon" },
     { label: "Spotify", to: "/spotify" },
     { label: "Games", to: "/games" },
     { label: "Socials", to: "/socials" },
@@ -312,6 +314,7 @@ function AppShell() {
                 <Route path="/gallery" element={<Gallery user={user} />} />
                 <Route path="/watchlist" element={<Watchlist user={user} />} />
                 <Route path="/watchlist/:itemId" element={<Watchlist user={user} />} />
+                <Route path="/avalon" element={<Avalon />} />
                 <Route path="/spotify" element={<Spotify user={user} />} />
                 <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
                 <Route path="/edit/:postId" element={<EditPost />} />
