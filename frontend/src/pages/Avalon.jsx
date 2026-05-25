@@ -96,6 +96,7 @@ export default function Avalon() {
   const submittedQuestCards = Object.keys(questChoices).length;
   const questTeamLocked = submittedQuestCards > 0;
   const questFailThreshold = playerCount >= 7 && currentQuestIndex === 3 ? 2 : 1;
+  const currentQuestNeedsTwoFails = questFailThreshold === 2;
 
   const resetRoundState = () => {
     setQuestResults([null, null, null, null, null]);
@@ -378,6 +379,7 @@ export default function Avalon() {
                   {questSizes.map((teamSize, index) => {
                     const result = questResults[index];
                     const current = index === currentQuestIndex && !winner && phase !== "assassin";
+                    const needsTwoFails = playerCount >= 7 && index === 3;
                     return (
                       <Paper
                         key={index}
@@ -393,12 +395,15 @@ export default function Avalon() {
                       >
                         <Typography variant="h3">Quest {index + 1}</Typography>
                         <Typography color="text.secondary">{teamSize} players</Typography>
+                        {needsTwoFails && (
+                          <Chip size="small" label="2 fails to fail" color="warning" variant="outlined" sx={{ mt: 1 }} />
+                        )}
                         <Chip
                           size="small"
                           label={result ? (result === "success" ? "Passed" : "Failed") : current ? "Current" : "Waiting"}
                           color={result === "success" ? "info" : result === "fail" ? "error" : current ? "secondary" : "default"}
                           variant={result || current ? "filled" : "outlined"}
-                          sx={{ mt: 1 }}
+                          sx={{ mt: 1, ml: needsTwoFails ? 0.75 : 0 }}
                         />
                       </Paper>
                     );
@@ -449,6 +454,11 @@ export default function Avalon() {
                         <Typography color="text.secondary" sx={wrapSx}>
                           Select {currentQuestSize} players for this quest. The team locks once any quest card is submitted.
                         </Typography>
+                        {currentQuestNeedsTwoFails && (
+                          <Alert severity="warning" sx={{ mt: 1.5 }}>
+                            This quest only fails if two or more Fail cards are played.
+                          </Alert>
+                        )}
                       </Box>
                       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" }, gap: 1 }}>
                         {assignments.map((assignment) => {
