@@ -19,6 +19,8 @@ import AnimatedSection from "../components/AnimatedSection";
 import { api } from "../components/api";
 import AvalonOffline from "./AvalonOffline";
 
+const avalonApi = (path) => `/api${path}`;
+
 const formatDuration = (seconds = 0) => {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
   const remainder = Math.floor(seconds % 60).toString().padStart(2, "0");
@@ -85,7 +87,8 @@ function OnlineGame({ game, setGame, refreshGame, setError }) {
     setBusy(true);
     setError("");
     try {
-      const data = await api(path, { method: "POST", body: JSON.stringify(body) });
+      const data = await api(avalonApi(path), { method: "POST", body: JSON.stringify(body) });
+      if (!data?.game) throw new Error("The game response was empty. Please try again.");
       setGame(data.game);
     } catch (err) {
       setError(err.message);
@@ -260,22 +263,25 @@ function OnlineAvalon({ user }) {
   const [error, setError] = useState("");
 
   const refreshLobbies = async () => {
-    const data = await api("/avalon/lobbies");
-    setLobbies(data.lobbies || []);
+    const data = await api(avalonApi("/avalon/lobbies"));
+    setLobbies(Array.isArray(data?.lobbies) ? data.lobbies : []);
   };
 
   const refreshGame = async () => {
     if (!game?.id) return;
-    const data = await api(`/avalon/games/${game.id}`);
+    const data = await api(avalonApi(`/avalon/games/${game.id}`));
+    if (!data?.game) throw new Error("The game response was empty. Please try again.");
     setGame(data.game);
   };
 
   const refreshLobby = async () => {
     if (!lobby?.id) return;
-    const data = await api(`/avalon/lobbies/${lobby.id}`);
+    const data = await api(avalonApi(`/avalon/lobbies/${lobby.id}`));
+    if (!data?.lobby) throw new Error("The lobby response was empty. Please try again.");
     setLobby(data.lobby);
     if (data.lobby?.gameId && !game) {
-      const gameData = await api(`/avalon/games/${data.lobby.gameId}`);
+      const gameData = await api(avalonApi(`/avalon/games/${data.lobby.gameId}`));
+      if (!gameData?.game) throw new Error("The game response was empty. Please try again.");
       setGame(gameData.game);
     }
   };
@@ -296,9 +302,10 @@ function OnlineAvalon({ user }) {
   const post = async (path, body = {}) => {
     setError("");
     try {
-      const data = await api(path, { method: "POST", body: JSON.stringify(body) });
+      const data = await api(avalonApi(path), { method: "POST", body: JSON.stringify(body) });
       if (data.game) setGame(data.game);
       if (data.lobby) setLobby(data.lobby);
+      if (!data?.game && !data?.lobby) throw new Error("The Avalon response was empty. Please try again.");
       await refreshLobbies();
     } catch (err) {
       setError(err.message);
@@ -373,7 +380,7 @@ function OnlineAvalon({ user }) {
                     <Button
                       variant="outlined"
                       startIcon={item.hasPassword ? <LockIcon /> : null}
-                      onClick={() => item.gameId ? api(`/avalon/games/${item.gameId}`).then((data) => setGame(data.game)).catch((err) => setError(err.message)) : post(`/avalon/lobbies/${item.id}/join`, { password: joinPassword })}
+                      onClick={() => item.gameId ? api(avalonApi(`/avalon/games/${item.gameId}`)).then((data) => setGame(data.game)).catch((err) => setError(err.message)) : post(`/avalon/lobbies/${item.id}/join`, { password: joinPassword })}
                     >
                       {item.gameId ? "Open game" : "Join"}
                     </Button>
