@@ -1,4 +1,6 @@
 import os
+import math
+import random
 import re
 import secrets
 import shutil
@@ -104,6 +106,23 @@ STEAM_STORE_FETCH_LIMIT_PER_COUNTRY = 70
 STEAM_PAYLOAD_CACHE_HOURS = 12
 STEAM_STORE_CACHE_DAYS = 14
 _last_cookie_cleanup = None
+
+AVALON_ROLE_COUNTS = {
+    5: {"good": 3, "evil": 2},
+    6: {"good": 4, "evil": 2},
+    7: {"good": 4, "evil": 3},
+    8: {"good": 5, "evil": 3},
+    9: {"good": 6, "evil": 3},
+    10: {"good": 6, "evil": 4},
+}
+AVALON_QUEST_SIZES = {
+    5: [2, 3, 2, 3, 3],
+    6: [2, 3, 4, 3, 4],
+    7: [2, 3, 3, 4, 4],
+    8: [3, 4, 4, 5, 5],
+    9: [3, 4, 4, 5, 5],
+    10: [3, 4, 4, 5, 5],
+}
 
 
 def get_db():
@@ -501,6 +520,157 @@ def init_db():
         )
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avalon_lobbies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            host_user_id INTEGER NOT NULL,
+            password_hash TEXT DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'waiting',
+            max_players INTEGER DEFAULT 10,
+            game_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            started_at DATETIME,
+            finished_at DATETIME,
+            expires_at DATETIME,
+            FOREIGN KEY (host_user_id) REFERENCES users(id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avalon_lobby_players (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lobby_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            ready INTEGER DEFAULT 0,
+            joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(lobby_id, user_id),
+            FOREIGN KEY (lobby_id) REFERENCES avalon_lobbies(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avalon_games (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            lobby_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'in_progress',
+            player_count INTEGER NOT NULL,
+            current_phase TEXT NOT NULL DEFAULT 'roles',
+            current_quest_index INTEGER DEFAULT 0,
+            current_leader_user_id INTEGER,
+            turn_index INTEGER DEFAULT 0,
+            rejected_votes INTEGER DEFAULT 0,
+            winner TEXT DEFAULT NULL,
+            started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            finished_at DATETIME,
+            expires_at DATETIME,
+            FOREIGN KEY (lobby_id) REFERENCES avalon_lobbies(id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avalon_game_players (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            role TEXT NOT NULL,
+            team TEXT NOT NULL,
+            turn_order INTEGER NOT NULL,
+            has_seen_role INTEGER DEFAULT 0,
+            continued_after_role INTEGER DEFAULT 0,
+            final_result TEXT DEFAULT NULL,
+            mmr_before INTEGER DEFAULT 1000,
+            mmr_after INTEGER DEFAULT 1000,
+            UNIQUE(game_id, user_id),
+            FOREIGN KEY (game_id) REFERENCES avalon_games(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avalon_quests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_id INTEGER NOT NULL,
+            quest_index INTEGER NOT NULL,
+            team_size INTEGER NOT NULL,
+            fail_threshold INTEGER NOT NULL DEFAULT 1,
+            leader_user_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'team_selection',
+            selected_team_json TEXT DEFAULT '[]',
+            result TEXT DEFAULT NULL,
+            fail_count INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            resolved_at DATETIME,
+            UNIQUE(game_id, quest_index),
+            FOREIGN KEY (game_id) REFERENCES avalon_games(id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avalon_votes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            quest_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            vote TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(quest_id, user_id),
+            FOREIGN KEY (quest_id) REFERENCES avalon_quests(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avalon_quest_cards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            quest_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            card TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(quest_id, user_id),
+            FOREIGN KEY (quest_id) REFERENCES avalon_quests(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avalon_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            game_id INTEGER NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            event_type TEXT NOT NULL,
+            message TEXT NOT NULL,
+            payload_json TEXT DEFAULT '{}',
+            FOREIGN KEY (game_id) REFERENCES avalon_games(id)
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS avalon_user_stats (
+            user_id INTEGER PRIMARY KEY,
+            games_played INTEGER DEFAULT 0,
+            games_won INTEGER DEFAULT 0,
+            games_lost INTEGER DEFAULT 0,
+            games_as_good INTEGER DEFAULT 0,
+            games_as_evil INTEGER DEFAULT 0,
+            games_as_merlin INTEGER DEFAULT 0,
+            merlin_games_won INTEGER DEFAULT 0,
+            games_as_assassin INTEGER DEFAULT 0,
+            killed_merlin INTEGER DEFAULT 0,
+            mmr INTEGER DEFAULT 1000,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
     for statement in [
         ("media_type", "ALTER TABLE watchlist_items ADD COLUMN media_type TEXT NOT NULL DEFAULT 'movie'"),
         ("release_year", "ALTER TABLE watchlist_items ADD COLUMN release_year TEXT DEFAULT ''"),
@@ -541,6 +711,10 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_concert_wishlist_order ON concert_wishlist(sort_order ASC, id ASC)",
         "CREATE INDEX IF NOT EXISTS idx_cookies_value ON cookies(cookie_value)",
         "CREATE INDEX IF NOT EXISTS idx_cookies_created ON cookies(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_avalon_lobbies_status_created ON avalon_lobbies(status, created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_avalon_lobby_players_lobby ON avalon_lobby_players(lobby_id)",
+        "CREATE INDEX IF NOT EXISTS idx_avalon_game_players_user ON avalon_game_players(user_id, game_id)",
+        "CREATE INDEX IF NOT EXISTS idx_avalon_events_game_created ON avalon_events(game_id, created_at ASC)",
     ]:
         db.execute(statement)
     migrate_travel_posts(db)
@@ -1894,6 +2068,860 @@ def update_spotify():
     return jsonify({"success": True, **payload})
 
 
+def require_user():
+    user = current_user()
+    if not user:
+        return None, ({"error": "Unauthorized"}, 401)
+    return user, None
+
+
+def parse_db_datetime(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).replace("Z", "")
+    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def avalon_fail_threshold(player_count, quest_index):
+    return 2 if player_count >= 7 and quest_index == 3 else 1
+
+
+def avalon_build_roles(player_count):
+    counts = AVALON_ROLE_COUNTS[player_count]
+    roles = [
+        {"role": "Merlin", "team": "good"},
+        {"role": "Assassin", "team": "evil"},
+    ]
+    roles.extend({"role": "Servant of Arthur", "team": "good"} for _ in range(counts["good"] - 1))
+    roles.extend({"role": "Minion of Mordred", "team": "evil"} for _ in range(counts["evil"] - 1))
+    random.shuffle(roles)
+    return roles
+
+
+def avalon_user_brief(user_id):
+    row = get_db().execute(
+        "SELECT id, username, display_name, about_me, avatar_url, created_at FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    return row_to_user(row) if row else None
+
+
+def avalon_player_user_payload(player):
+    return {
+        "id": player["user_id"],
+        "username": player["username"],
+        "displayName": player["display_name"] or player["username"],
+        "aboutMe": player["about_me"] or "",
+        "avatarUrl": player["avatar_url"] or "",
+        "createdAt": player["created_at"],
+    }
+
+
+def avalon_stats_for_user(user_id):
+    db = get_db()
+    row = db.execute("SELECT * FROM avalon_user_stats WHERE user_id = ?", (user_id,)).fetchone()
+    if not row:
+        return {
+            "gamesPlayed": 0,
+            "gamesWon": 0,
+            "gamesLost": 0,
+            "gamesAsGood": 0,
+            "gamesAsEvil": 0,
+            "gamesAsMerlin": 0,
+            "merlinGamesWon": 0,
+            "gamesAsAssassin": 0,
+            "killedMerlin": 0,
+            "mmr": 1000,
+            "winRate": 0,
+        }
+    played = row["games_played"] or 0
+    return {
+        "gamesPlayed": played,
+        "gamesWon": row["games_won"] or 0,
+        "gamesLost": row["games_lost"] or 0,
+        "gamesAsGood": row["games_as_good"] or 0,
+        "gamesAsEvil": row["games_as_evil"] or 0,
+        "gamesAsMerlin": row["games_as_merlin"] or 0,
+        "merlinGamesWon": row["merlin_games_won"] or 0,
+        "gamesAsAssassin": row["games_as_assassin"] or 0,
+        "killedMerlin": row["killed_merlin"] or 0,
+        "mmr": row["mmr"] or 1000,
+        "winRate": round(((row["games_won"] or 0) / played) * 100) if played else 0,
+    }
+
+
+def avalon_lobby_players(lobby_id):
+    rows = get_db().execute(
+        """
+        SELECT lp.ready, lp.joined_at, users.id, users.username, users.display_name, users.about_me, users.avatar_url, users.created_at
+        FROM avalon_lobby_players lp
+        JOIN users ON users.id = lp.user_id
+        WHERE lp.lobby_id = ?
+        ORDER BY lp.joined_at ASC, lp.id ASC
+        """,
+        (lobby_id,),
+    ).fetchall()
+    return [{**row_to_user(row), "ready": bool(row["ready"]), "joinedAt": row["joined_at"]} for row in rows]
+
+
+def avalon_lobby_payload(lobby):
+    players = avalon_lobby_players(lobby["id"])
+    return {
+        "id": lobby["id"],
+        "name": lobby["name"],
+        "hostUserId": lobby["host_user_id"],
+        "host": avalon_user_brief(lobby["host_user_id"]),
+        "hasPassword": bool(lobby["password_hash"]),
+        "status": lobby["status"],
+        "maxPlayers": lobby["max_players"],
+        "gameId": lobby["game_id"],
+        "createdAt": lobby["created_at"],
+        "startedAt": lobby["started_at"],
+        "finishedAt": lobby["finished_at"],
+        "expiresAt": lobby["expires_at"],
+        "players": players,
+        "playerCount": len(players),
+    }
+
+
+def avalon_event(game_id, event_type, message, payload=None):
+    get_db().execute(
+        "INSERT INTO avalon_events (game_id, event_type, message, payload_json) VALUES (?, ?, ?, ?)",
+        (game_id, event_type, message, json.dumps(payload or {})),
+    )
+
+
+def avalon_game_players(game_id):
+    rows = get_db().execute(
+        """
+        SELECT gp.*, users.username, users.display_name, users.about_me, users.avatar_url, users.created_at
+        FROM avalon_game_players gp
+        JOIN users ON users.id = gp.user_id
+        WHERE gp.game_id = ?
+        ORDER BY gp.turn_order ASC
+        """,
+        (game_id,),
+    ).fetchall()
+    return rows
+
+
+def avalon_current_quest(game_id):
+    return get_db().execute(
+        "SELECT * FROM avalon_quests WHERE game_id = ? ORDER BY quest_index DESC LIMIT 1",
+        (game_id,),
+    ).fetchone()
+
+
+def avalon_create_quest(game, leader_user_id):
+    db = get_db()
+    quest_index = game["current_quest_index"]
+    player_count = game["player_count"]
+    team_size = AVALON_QUEST_SIZES[player_count][quest_index]
+    fail_threshold = avalon_fail_threshold(player_count, quest_index)
+    db.execute(
+        """
+        INSERT OR IGNORE INTO avalon_quests
+        (game_id, quest_index, team_size, fail_threshold, leader_user_id, status)
+        VALUES (?, ?, ?, ?, ?, 'team_selection')
+        """,
+        (game["id"], quest_index, team_size, fail_threshold, leader_user_id),
+    )
+
+
+def avalon_next_leader(game_id, current_leader_id=None):
+    players = avalon_game_players(game_id)
+    if not players:
+        return None, 0
+    if current_leader_id is None:
+        return players[0]["user_id"], 0
+    current_index = next((index for index, player in enumerate(players) if player["user_id"] == current_leader_id), -1)
+    next_index = (current_index + 1) % len(players)
+    return players[next_index]["user_id"], next_index
+
+
+def avalon_finish_game(game_id, winner, assassin_user_id=None, assassin_target_user_id=None):
+    db = get_db()
+    game = db.execute("SELECT * FROM avalon_games WHERE id = ?", (game_id,)).fetchone()
+    if not game or game["status"] == "finished":
+        return
+
+    players = avalon_game_players(game_id)
+    good_players = [player for player in players if player["team"] == "good"]
+    evil_players = [player for player in players if player["team"] == "evil"]
+    for player in players:
+        db.execute(
+            "INSERT OR IGNORE INTO avalon_user_stats (user_id, mmr) VALUES (?, 1000)",
+            (player["user_id"],),
+        )
+
+    stats_rows = {
+        row["user_id"]: row
+        for row in db.execute(
+            "SELECT * FROM avalon_user_stats WHERE user_id IN (%s)" % ",".join("?" for _ in players),
+            [player["user_id"] for player in players],
+        ).fetchall()
+    }
+    good_avg = sum(stats_rows[player["user_id"]]["mmr"] for player in good_players) / max(len(good_players), 1)
+    evil_avg = sum(stats_rows[player["user_id"]]["mmr"] for player in evil_players) / max(len(evil_players), 1)
+    expected_good = 1 / (1 + math.pow(10, (evil_avg - good_avg) / 400))
+    expected_by_team = {"good": expected_good, "evil": 1 - expected_good}
+    actual_by_team = {"good": 1 if winner == "good" else 0, "evil": 1 if winner == "evil" else 0}
+
+    for player in players:
+        stats = stats_rows[player["user_id"]]
+        old_mmr = stats["mmr"] or 1000
+        k_factor = 32 if (stats["games_played"] or 0) < 20 else 24
+        new_mmr = max(100, round(old_mmr + k_factor * (actual_by_team[player["team"]] - expected_by_team[player["team"]])))
+        won = player["team"] == winner
+        killed_merlin = player["user_id"] == assassin_user_id and assassin_target_user_id and winner == "evil"
+        db.execute(
+            """
+            UPDATE avalon_user_stats
+            SET games_played = games_played + 1,
+                games_won = games_won + ?,
+                games_lost = games_lost + ?,
+                games_as_good = games_as_good + ?,
+                games_as_evil = games_as_evil + ?,
+                games_as_merlin = games_as_merlin + ?,
+                merlin_games_won = merlin_games_won + ?,
+                games_as_assassin = games_as_assassin + ?,
+                killed_merlin = killed_merlin + ?,
+                mmr = ?
+            WHERE user_id = ?
+            """,
+            (
+                1 if won else 0,
+                0 if won else 1,
+                1 if player["team"] == "good" else 0,
+                1 if player["team"] == "evil" else 0,
+                1 if player["role"] == "Merlin" else 0,
+                1 if player["role"] == "Merlin" and won else 0,
+                1 if player["role"] == "Assassin" else 0,
+                1 if killed_merlin else 0,
+                new_mmr,
+                player["user_id"],
+            ),
+        )
+        db.execute(
+            "UPDATE avalon_game_players SET final_result = ?, mmr_before = ?, mmr_after = ? WHERE game_id = ? AND user_id = ?",
+            ("victory" if won else "defeat", old_mmr, new_mmr, game_id, player["user_id"]),
+        )
+
+    now = datetime.now()
+    db.execute(
+        "UPDATE avalon_games SET status = 'finished', current_phase = 'finished', winner = ?, finished_at = ? WHERE id = ?",
+        (winner, now, game_id),
+    )
+    db.execute(
+        "UPDATE avalon_lobbies SET status = 'finished', finished_at = ? WHERE id = ?",
+        (now, game["lobby_id"]),
+    )
+    avalon_event(game_id, "game_finished", f"{winner.title()} wins", {"winner": winner})
+
+
+def avalon_expire_game_if_needed(game):
+    if not game or game["status"] != "in_progress":
+        return game
+    expires_at = parse_db_datetime(game["expires_at"])
+    if expires_at and datetime.now() > expires_at:
+        db = get_db()
+        db.execute(
+            "UPDATE avalon_games SET status = 'expired', current_phase = 'finished', finished_at = ? WHERE id = ?",
+            (datetime.now(), game["id"]),
+        )
+        db.execute(
+            "UPDATE avalon_lobbies SET status = 'expired', finished_at = ? WHERE id = ?",
+            (datetime.now(), game["lobby_id"]),
+        )
+        avalon_event(game["id"], "game_expired", "Game expired after 24 hours")
+        db.commit()
+        return db.execute("SELECT * FROM avalon_games WHERE id = ?", (game["id"],)).fetchone()
+    return game
+
+
+def avalon_game_payload(game_id, viewer_id=None):
+    db = get_db()
+    game = db.execute("SELECT * FROM avalon_games WHERE id = ?", (game_id,)).fetchone()
+    game = avalon_expire_game_if_needed(game)
+    if not game:
+        return None
+
+    players = avalon_game_players(game_id)
+    player_payloads = []
+    viewer_player = next((player for player in players if player["user_id"] == viewer_id), None)
+    for player in players:
+        player_payload = {
+            "user": avalon_player_user_payload(player),
+            "turnOrder": player["turn_order"],
+            "team": player["team"] if (player["user_id"] == viewer_id or game["status"] == "finished") else None,
+            "role": player["role"] if (player["user_id"] == viewer_id or game["status"] == "finished") else None,
+            "hasSeenRole": bool(player["has_seen_role"]),
+            "continuedAfterRole": bool(player["continued_after_role"]),
+            "finalResult": player["final_result"],
+            "mmrBefore": player["mmr_before"],
+            "mmrAfter": player["mmr_after"],
+        }
+        player_payloads.append(player_payload)
+
+    quests = db.execute(
+        "SELECT * FROM avalon_quests WHERE game_id = ? ORDER BY quest_index ASC",
+        (game_id,),
+    ).fetchall()
+    quest_payloads = []
+    current_quest_payload = None
+    for quest in quests:
+        selected_team = json.loads(quest["selected_team_json"] or "[]")
+        votes = db.execute("SELECT user_id, vote FROM avalon_votes WHERE quest_id = ?", (quest["id"],)).fetchall()
+        cards = db.execute("SELECT user_id, card FROM avalon_quest_cards WHERE quest_id = ?", (quest["id"],)).fetchall()
+        vote_payloads = [{"userId": vote["user_id"], "vote": vote["vote"]} for vote in votes]
+        card_payloads = [{"userId": card["user_id"], "submitted": True} for card in cards]
+        payload = {
+            "id": quest["id"],
+            "questIndex": quest["quest_index"],
+            "teamSize": quest["team_size"],
+            "failThreshold": quest["fail_threshold"],
+            "leaderUserId": quest["leader_user_id"],
+            "status": quest["status"],
+            "selectedTeam": selected_team,
+            "result": quest["result"],
+            "failCount": quest["fail_count"],
+            "votes": vote_payloads,
+            "approveCount": sum(1 for vote in votes if vote["vote"] == "approve"),
+            "rejectCount": sum(1 for vote in votes if vote["vote"] == "reject"),
+            "questCards": card_payloads,
+        }
+        quest_payloads.append(payload)
+        if quest["quest_index"] == game["current_quest_index"]:
+            current_quest_payload = payload
+
+    events = db.execute(
+        "SELECT id, created_at, event_type, message, payload_json FROM avalon_events WHERE game_id = ? ORDER BY created_at ASC, id ASC",
+        (game_id,),
+    ).fetchall()
+    started_at = parse_db_datetime(game["started_at"])
+    finished_at = parse_db_datetime(game["finished_at"]) or datetime.now()
+    duration = int((finished_at - started_at).total_seconds()) if started_at else 0
+    return {
+        "id": game["id"],
+        "lobbyId": game["lobby_id"],
+        "status": game["status"],
+        "playerCount": game["player_count"],
+        "currentPhase": game["current_phase"],
+        "currentQuestIndex": game["current_quest_index"],
+        "currentLeaderUserId": game["current_leader_user_id"],
+        "rejectedVotes": game["rejected_votes"],
+        "winner": game["winner"],
+        "startedAt": game["started_at"],
+        "finishedAt": game["finished_at"],
+        "expiresAt": game["expires_at"],
+        "durationSeconds": max(duration, 0),
+        "viewer": {
+            "userId": viewer_id,
+            "role": viewer_player["role"] if viewer_player else None,
+            "team": viewer_player["team"] if viewer_player else None,
+            "continuedAfterRole": bool(viewer_player["continued_after_role"]) if viewer_player else False,
+            "isLeader": bool(viewer_player and viewer_player["user_id"] == game["current_leader_user_id"]),
+        },
+        "assassinTargets": [
+            avalon_player_user_payload(player)
+            for player in players
+            if player["team"] == "good" and (game["current_phase"] == "assassin" or game["status"] == "finished")
+        ],
+        "players": player_payloads,
+        "quests": quest_payloads,
+        "currentQuest": current_quest_payload,
+        "events": [
+            {
+                "id": event["id"],
+                "createdAt": event["created_at"],
+                "type": event["event_type"],
+                "message": event["message"],
+                "payload": json.loads(event["payload_json"] or "{}"),
+            }
+            for event in events
+        ],
+    }
+
+
+def avalon_history_for_user(user_id, limit=20):
+    db = get_db()
+    games = db.execute(
+        """
+        SELECT gp.role, gp.team, gp.final_result, gp.mmr_before, gp.mmr_after,
+               g.id, g.winner, g.started_at, g.finished_at, g.status
+        FROM avalon_game_players gp
+        JOIN avalon_games g ON g.id = gp.game_id
+        WHERE gp.user_id = ? AND g.status = 'finished'
+        ORDER BY g.finished_at DESC, g.id DESC
+        LIMIT ?
+        """,
+        (user_id, limit),
+    ).fetchall()
+    history = []
+    for game in games:
+        events = db.execute(
+            "SELECT id, created_at, event_type, message FROM avalon_events WHERE game_id = ? ORDER BY created_at ASC, id ASC",
+            (game["id"],),
+        ).fetchall()
+        started_at = parse_db_datetime(game["started_at"])
+        finished_at = parse_db_datetime(game["finished_at"])
+        duration = int((finished_at - started_at).total_seconds()) if started_at and finished_at else 0
+        history.append({
+            "gameId": game["id"],
+            "role": game["role"],
+            "team": game["team"],
+            "result": game["final_result"],
+            "winner": game["winner"],
+            "startedAt": game["started_at"],
+            "finishedAt": game["finished_at"],
+            "durationSeconds": max(duration, 0),
+            "mmrBefore": game["mmr_before"],
+            "mmrAfter": game["mmr_after"],
+            "events": [
+                {"id": event["id"], "createdAt": event["created_at"], "type": event["event_type"], "message": event["message"]}
+                for event in events
+            ],
+        })
+    return history
+
+
+@app.route("/avalon/lobbies", methods=["GET"])
+def avalon_list_lobbies():
+    db = get_db()
+    lobbies = db.execute(
+        """
+        SELECT * FROM avalon_lobbies
+        WHERE status IN ('waiting', 'in_progress')
+        ORDER BY created_at DESC, id DESC
+        LIMIT 50
+        """
+    ).fetchall()
+    return jsonify({"lobbies": [avalon_lobby_payload(lobby) for lobby in lobbies]})
+
+
+@app.route("/avalon/lobbies", methods=["POST"])
+def avalon_create_lobby():
+    user, error = require_user()
+    if error:
+        return error
+    data = request.get_json() or {}
+    name = (data.get("name") or f"{user['display_name'] or user['username']}'s Avalon lobby").strip()[:80]
+    password = (data.get("password") or "").strip()
+    max_players = max(5, min(int(data.get("maxPlayers") or 10), 10))
+    db = get_db()
+    cursor = db.execute(
+        "INSERT INTO avalon_lobbies (name, host_user_id, password_hash, max_players) VALUES (?, ?, ?, ?)",
+        (name, user["id"], generate_password_hash(password) if password else "", max_players),
+    )
+    lobby_id = cursor.lastrowid
+    db.execute(
+        "INSERT INTO avalon_lobby_players (lobby_id, user_id, ready) VALUES (?, ?, 1)",
+        (lobby_id, user["id"]),
+    )
+    db.commit()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    return jsonify({"lobby": avalon_lobby_payload(lobby)}), 201
+
+
+@app.route("/avalon/lobbies/<int:lobby_id>", methods=["GET"])
+def avalon_get_lobby(lobby_id):
+    lobby = get_db().execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    if not lobby:
+        return {"error": "Lobby not found"}, 404
+    return jsonify({"lobby": avalon_lobby_payload(lobby)})
+
+
+@app.route("/avalon/lobbies/<int:lobby_id>/join", methods=["POST"])
+def avalon_join_lobby(lobby_id):
+    user, error = require_user()
+    if error:
+        return error
+    data = request.get_json() or {}
+    password = (data.get("password") or "").strip()
+    db = get_db()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    if not lobby:
+        return {"error": "Lobby not found"}, 404
+    if lobby["status"] != "waiting":
+        return {"error": "This lobby has already started"}, 400
+    if lobby["password_hash"] and not check_password_hash(lobby["password_hash"], password):
+        return {"error": "Incorrect lobby password"}, 403
+    count = db.execute("SELECT COUNT(*) AS count FROM avalon_lobby_players WHERE lobby_id = ?", (lobby_id,)).fetchone()["count"]
+    if count >= lobby["max_players"]:
+        return {"error": "Lobby is full"}, 400
+    db.execute("INSERT OR IGNORE INTO avalon_lobby_players (lobby_id, user_id, ready) VALUES (?, ?, 0)", (lobby_id, user["id"]))
+    db.commit()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    return jsonify({"lobby": avalon_lobby_payload(lobby)})
+
+
+@app.route("/avalon/lobbies/<int:lobby_id>/ready", methods=["POST"])
+def avalon_set_ready(lobby_id):
+    user, error = require_user()
+    if error:
+        return error
+    ready = 1 if (request.get_json() or {}).get("ready", True) else 0
+    db = get_db()
+    result = db.execute(
+        """
+        UPDATE avalon_lobby_players
+        SET ready = ?
+        WHERE lobby_id = ? AND user_id = ?
+        """,
+        (ready, lobby_id, user["id"]),
+    )
+    if result.rowcount == 0:
+        return {"error": "You are not in this lobby"}, 404
+    db.commit()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    return jsonify({"lobby": avalon_lobby_payload(lobby)})
+
+
+@app.route("/avalon/lobbies/<int:lobby_id>/leave", methods=["POST"])
+def avalon_leave_lobby(lobby_id):
+    user, error = require_user()
+    if error:
+        return error
+    db = get_db()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    if not lobby:
+        return {"error": "Lobby not found"}, 404
+    if lobby["status"] != "waiting":
+        return {"error": "Game has already started"}, 400
+    db.execute("DELETE FROM avalon_lobby_players WHERE lobby_id = ? AND user_id = ?", (lobby_id, user["id"]))
+    remaining = db.execute("SELECT user_id FROM avalon_lobby_players WHERE lobby_id = ? ORDER BY joined_at ASC LIMIT 1", (lobby_id,)).fetchone()
+    if not remaining:
+        db.execute("UPDATE avalon_lobbies SET status = 'closed' WHERE id = ?", (lobby_id,))
+    elif lobby["host_user_id"] == user["id"]:
+        db.execute("UPDATE avalon_lobbies SET host_user_id = ? WHERE id = ?", (remaining["user_id"], lobby_id))
+    db.commit()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    return jsonify({"lobby": avalon_lobby_payload(lobby)})
+
+
+@app.route("/avalon/lobbies/<int:lobby_id>/start", methods=["POST"])
+def avalon_start_lobby(lobby_id):
+    user, error = require_user()
+    if error:
+        return error
+    db = get_db()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    if not lobby:
+        return {"error": "Lobby not found"}, 404
+    if lobby["host_user_id"] != user["id"]:
+        return {"error": "Only the host can start this lobby"}, 403
+    if lobby["status"] != "waiting":
+        return {"error": "Lobby has already started"}, 400
+    lobby_players = db.execute(
+        """
+        SELECT lp.ready, users.id, users.username, users.display_name
+        FROM avalon_lobby_players lp
+        JOIN users ON users.id = lp.user_id
+        WHERE lp.lobby_id = ?
+        ORDER BY lp.joined_at ASC, lp.id ASC
+        """,
+        (lobby_id,),
+    ).fetchall()
+    if len(lobby_players) < 5 or len(lobby_players) > 10:
+        return {"error": "Avalon online needs 5 to 10 players"}, 400
+    if any(not player["ready"] for player in lobby_players):
+        return {"error": "Everyone needs to be ready first"}, 400
+
+    now = datetime.now()
+    expires_at = now + timedelta(days=1)
+    roles = avalon_build_roles(len(lobby_players))
+    turn_order = list(range(len(lobby_players)))
+    random.shuffle(turn_order)
+    ordered_players = [lobby_players[index] for index in turn_order]
+    leader = random.choice(ordered_players)
+    cursor = db.execute(
+        """
+        INSERT INTO avalon_games
+        (lobby_id, player_count, current_phase, current_leader_user_id, turn_index, started_at, expires_at)
+        VALUES (?, ?, 'roles', ?, 0, ?, ?)
+        """,
+        (lobby_id, len(lobby_players), leader["id"], now, expires_at),
+    )
+    game_id = cursor.lastrowid
+    for order_index, player in enumerate(ordered_players):
+        role = roles[order_index]
+        db.execute(
+            """
+            INSERT INTO avalon_game_players
+            (game_id, user_id, role, team, turn_order, mmr_before, mmr_after)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (game_id, player["id"], role["role"], role["team"], order_index, avalon_stats_for_user(player["id"])["mmr"], avalon_stats_for_user(player["id"])["mmr"]),
+        )
+    db.execute(
+        "UPDATE avalon_lobbies SET status = 'in_progress', game_id = ?, started_at = ?, expires_at = ? WHERE id = ?",
+        (game_id, now, expires_at, lobby_id),
+    )
+    avalon_event(game_id, "game_started", "Game started", {"players": [player["id"] for player in ordered_players]})
+    avalon_event(game_id, "leader_selected", f"{leader['display_name'] or leader['username']} is the first leader", {"leaderUserId": leader["id"]})
+    db.commit()
+    return jsonify({"game": avalon_game_payload(game_id, user["id"])})
+
+
+@app.route("/avalon/games/<int:game_id>", methods=["GET"])
+def avalon_get_game(game_id):
+    user, error = require_user()
+    if error:
+        return error
+    player = get_db().execute(
+        "SELECT id FROM avalon_game_players WHERE game_id = ? AND user_id = ?",
+        (game_id, user["id"]),
+    ).fetchone()
+    if not player:
+        return {"error": "You are not in this game"}, 403
+    game = avalon_game_payload(game_id, user["id"])
+    if not game:
+        return {"error": "Game not found"}, 404
+    return jsonify({"game": game})
+
+
+@app.route("/avalon/games/<int:game_id>/continue", methods=["POST"])
+def avalon_continue_after_role(game_id):
+    user, error = require_user()
+    if error:
+        return error
+    db = get_db()
+    game = db.execute("SELECT * FROM avalon_games WHERE id = ?", (game_id,)).fetchone()
+    game = avalon_expire_game_if_needed(game)
+    if not game or game["status"] != "in_progress":
+        return {"error": "Game is not active"}, 400
+    if game["current_phase"] != "roles":
+        return jsonify({"game": avalon_game_payload(game_id, user["id"])})
+    result = db.execute(
+        "UPDATE avalon_game_players SET has_seen_role = 1, continued_after_role = 1 WHERE game_id = ? AND user_id = ?",
+        (game_id, user["id"]),
+    )
+    if result.rowcount == 0:
+        return {"error": "You are not in this game"}, 403
+    pending = db.execute(
+        "SELECT COUNT(*) AS count FROM avalon_game_players WHERE game_id = ? AND continued_after_role = 0",
+        (game_id,),
+    ).fetchone()["count"]
+    if pending == 0:
+        avalon_create_quest(game, game["current_leader_user_id"])
+        db.execute("UPDATE avalon_games SET current_phase = 'team_selection' WHERE id = ?", (game_id,))
+        avalon_event(game_id, "roles_confirmed", "Everyone confirmed their role")
+    db.commit()
+    return jsonify({"game": avalon_game_payload(game_id, user["id"])})
+
+
+@app.route("/avalon/games/<int:game_id>/team", methods=["POST"])
+def avalon_choose_team(game_id):
+    user, error = require_user()
+    if error:
+        return error
+    data = request.get_json() or {}
+    selected_team = [int(user_id) for user_id in data.get("selectedTeam", [])]
+    db = get_db()
+    game = avalon_expire_game_if_needed(db.execute("SELECT * FROM avalon_games WHERE id = ?", (game_id,)).fetchone())
+    if not game or game["status"] != "in_progress" or game["current_phase"] != "team_selection":
+        return {"error": "Team selection is not active"}, 400
+    if game["current_leader_user_id"] != user["id"]:
+        return {"error": "Only the current leader can choose the team"}, 403
+    quest = avalon_current_quest(game_id)
+    if not quest:
+        avalon_create_quest(game, user["id"])
+        quest = avalon_current_quest(game_id)
+    if len(set(selected_team)) != quest["team_size"]:
+        return {"error": f"Select exactly {quest['team_size']} players"}, 400
+    valid_players = {
+        row["user_id"]
+        for row in db.execute("SELECT user_id FROM avalon_game_players WHERE game_id = ?", (game_id,)).fetchall()
+    }
+    if any(player_id not in valid_players for player_id in selected_team):
+        return {"error": "Selected team contains a player outside this game"}, 400
+    db.execute(
+        "UPDATE avalon_quests SET selected_team_json = ?, status = 'voting' WHERE id = ?",
+        (json.dumps(selected_team), quest["id"]),
+    )
+    db.execute("DELETE FROM avalon_votes WHERE quest_id = ?", (quest["id"],))
+    db.execute("DELETE FROM avalon_quest_cards WHERE quest_id = ?", (quest["id"],))
+    db.execute("UPDATE avalon_games SET current_phase = 'voting' WHERE id = ?", (game_id,))
+    names = [
+        (avalon_user_brief(player_id) or {}).get("displayName") or (avalon_user_brief(player_id) or {}).get("username") or str(player_id)
+        for player_id in selected_team
+    ]
+    avalon_event(game_id, "team_selected", f"{user['display_name'] or user['username']} picked {', '.join(names)}", {"selectedTeam": selected_team})
+    db.commit()
+    return jsonify({"game": avalon_game_payload(game_id, user["id"])})
+
+
+@app.route("/avalon/games/<int:game_id>/vote", methods=["POST"])
+def avalon_vote_team(game_id):
+    user, error = require_user()
+    if error:
+        return error
+    vote = (request.get_json() or {}).get("vote")
+    if vote not in ("approve", "reject"):
+        return {"error": "Vote must be approve or reject"}, 400
+    db = get_db()
+    game = avalon_expire_game_if_needed(db.execute("SELECT * FROM avalon_games WHERE id = ?", (game_id,)).fetchone())
+    if not game or game["status"] != "in_progress" or game["current_phase"] != "voting":
+        return {"error": "Voting is not active"}, 400
+    if not db.execute("SELECT id FROM avalon_game_players WHERE game_id = ? AND user_id = ?", (game_id, user["id"])).fetchone():
+        return {"error": "You are not in this game"}, 403
+    quest = avalon_current_quest(game_id)
+    db.execute(
+        "INSERT OR REPLACE INTO avalon_votes (quest_id, user_id, vote) VALUES (?, ?, ?)",
+        (quest["id"], user["id"], vote),
+    )
+    vote_count = db.execute("SELECT COUNT(*) AS count FROM avalon_votes WHERE quest_id = ?", (quest["id"],)).fetchone()["count"]
+    if vote_count == game["player_count"]:
+        votes = db.execute("SELECT vote FROM avalon_votes WHERE quest_id = ?", (quest["id"],)).fetchall()
+        approve_count = sum(1 for item in votes if item["vote"] == "approve")
+        reject_count = len(votes) - approve_count
+        avalon_event(game_id, "vote_result", f"Team vote: {approve_count} approve, {reject_count} reject", {"approve": approve_count, "reject": reject_count})
+        if approve_count > reject_count:
+            db.execute("UPDATE avalon_quests SET status = 'quest_cards' WHERE id = ?", (quest["id"],))
+            db.execute("UPDATE avalon_games SET current_phase = 'quest_cards', rejected_votes = 0 WHERE id = ?", (game_id,))
+        else:
+            rejected_votes = game["rejected_votes"] + 1
+            if rejected_votes >= 5:
+                db.execute("UPDATE avalon_games SET rejected_votes = ? WHERE id = ?", (rejected_votes, game_id))
+                avalon_event(game_id, "five_rejections", "Five teams were rejected")
+                avalon_finish_game(game_id, "evil")
+            else:
+                leader_user_id, turn_index = avalon_next_leader(game_id, game["current_leader_user_id"])
+                db.execute(
+                    """
+                    UPDATE avalon_games
+                    SET current_phase = 'team_selection', current_leader_user_id = ?, turn_index = ?, rejected_votes = ?
+                    WHERE id = ?
+                    """,
+                    (leader_user_id, turn_index, rejected_votes, game_id),
+                )
+                db.execute(
+                    "UPDATE avalon_quests SET status = 'team_selection', selected_team_json = '[]' WHERE id = ?",
+                    (quest["id"],),
+                )
+                avalon_event(game_id, "team_rejected", "Team rejected; leadership passes on", {"leaderUserId": leader_user_id})
+    db.commit()
+    return jsonify({"game": avalon_game_payload(game_id, user["id"])})
+
+
+@app.route("/avalon/games/<int:game_id>/quest-card", methods=["POST"])
+def avalon_submit_quest_card(game_id):
+    user, error = require_user()
+    if error:
+        return error
+    card = (request.get_json() or {}).get("card")
+    if card not in ("success", "fail"):
+        return {"error": "Quest card must be success or fail"}, 400
+    db = get_db()
+    game = avalon_expire_game_if_needed(db.execute("SELECT * FROM avalon_games WHERE id = ?", (game_id,)).fetchone())
+    if not game or game["status"] != "in_progress" or game["current_phase"] != "quest_cards":
+        return {"error": "Quest cards are not active"}, 400
+    player = db.execute("SELECT * FROM avalon_game_players WHERE game_id = ? AND user_id = ?", (game_id, user["id"])).fetchone()
+    if not player:
+        return {"error": "You are not in this game"}, 403
+    if player["team"] == "good" and card == "fail":
+        return {"error": "Good players can only choose Success"}, 400
+    quest = avalon_current_quest(game_id)
+    selected_team = json.loads(quest["selected_team_json"] or "[]")
+    if user["id"] not in selected_team:
+        return {"error": "You are not on this quest"}, 403
+    db.execute(
+        "INSERT OR REPLACE INTO avalon_quest_cards (quest_id, user_id, card) VALUES (?, ?, ?)",
+        (quest["id"], user["id"], card),
+    )
+    card_count = db.execute("SELECT COUNT(*) AS count FROM avalon_quest_cards WHERE quest_id = ?", (quest["id"],)).fetchone()["count"]
+    if card_count == quest["team_size"]:
+        cards = db.execute("SELECT card FROM avalon_quest_cards WHERE quest_id = ?", (quest["id"],)).fetchall()
+        fail_count = sum(1 for item in cards if item["card"] == "fail")
+        result = "fail" if fail_count >= quest["fail_threshold"] else "success"
+        db.execute(
+            """
+            UPDATE avalon_quests
+            SET status = 'resolved', result = ?, fail_count = ?, resolved_at = ?
+            WHERE id = ?
+            """,
+            (result, fail_count, datetime.now(), quest["id"]),
+        )
+        avalon_event(game_id, "quest_result", f"Quest {quest['quest_index'] + 1} {'failed' if result == 'fail' else 'passed'}", {"failCount": fail_count, "result": result})
+        totals = db.execute(
+            """
+            SELECT
+                SUM(CASE WHEN result = 'success' THEN 1 ELSE 0 END) AS successes,
+                SUM(CASE WHEN result = 'fail' THEN 1 ELSE 0 END) AS fails
+            FROM avalon_quests
+            WHERE game_id = ? AND result IS NOT NULL
+            """,
+            (game_id,),
+        ).fetchone()
+        if (totals["fails"] or 0) >= 3:
+            avalon_finish_game(game_id, "evil")
+        elif (totals["successes"] or 0) >= 3:
+            db.execute("UPDATE avalon_games SET current_phase = 'assassin' WHERE id = ?", (game_id,))
+            avalon_event(game_id, "assassin_phase", "Good completed three quests. Assassin chooses Merlin.")
+        else:
+            next_index = game["current_quest_index"] + 1
+            leader_user_id, turn_index = avalon_next_leader(game_id, game["current_leader_user_id"])
+            db.execute(
+                """
+                UPDATE avalon_games
+                SET current_phase = 'team_selection', current_quest_index = ?, current_leader_user_id = ?, turn_index = ?, rejected_votes = 0
+                WHERE id = ?
+                """,
+                (next_index, leader_user_id, turn_index, game_id),
+            )
+            next_game = db.execute("SELECT * FROM avalon_games WHERE id = ?", (game_id,)).fetchone()
+            avalon_create_quest(next_game, leader_user_id)
+            avalon_event(game_id, "leader_selected", "Leadership passes on", {"leaderUserId": leader_user_id})
+    db.commit()
+    return jsonify({"game": avalon_game_payload(game_id, user["id"])})
+
+
+@app.route("/avalon/games/<int:game_id>/assassin-pick", methods=["POST"])
+def avalon_assassin_pick(game_id):
+    user, error = require_user()
+    if error:
+        return error
+    target_user_id = int((request.get_json() or {}).get("targetUserId") or 0)
+    db = get_db()
+    game = avalon_expire_game_if_needed(db.execute("SELECT * FROM avalon_games WHERE id = ?", (game_id,)).fetchone())
+    if not game or game["status"] != "in_progress" or game["current_phase"] != "assassin":
+        return {"error": "Assassin choice is not active"}, 400
+    assassin = db.execute(
+        "SELECT * FROM avalon_game_players WHERE game_id = ? AND user_id = ? AND role = 'Assassin'",
+        (game_id, user["id"]),
+    ).fetchone()
+    if not assassin:
+        return {"error": "Only the Assassin can choose Merlin"}, 403
+    target = db.execute(
+        "SELECT * FROM avalon_game_players WHERE game_id = ? AND user_id = ? AND team = 'good'",
+        (game_id, target_user_id),
+    ).fetchone()
+    if not target:
+        return {"error": "Pick a good player"}, 400
+    winner = "evil" if target["role"] == "Merlin" else "good"
+    avalon_event(game_id, "assassin_pick", f"Assassin picked {avalon_user_brief(target_user_id)['displayName']}", {"targetUserId": target_user_id, "hitMerlin": target["role"] == "Merlin"})
+    avalon_finish_game(game_id, winner, assassin_user_id=user["id"], assassin_target_user_id=target_user_id)
+    db.commit()
+    return jsonify({"game": avalon_game_payload(game_id, user["id"])})
+
+
+@app.route("/users/<int:user_id>/avalon-stats", methods=["GET"])
+def avalon_user_stats_endpoint(user_id):
+    return jsonify({"stats": avalon_stats_for_user(user_id)})
+
+
+@app.route("/users/<int:user_id>/avalon-history", methods=["GET"])
+def avalon_user_history_endpoint(user_id):
+    return jsonify({"history": avalon_history_for_user(user_id)})
+
+
 @app.route("/register", methods=["POST"])
 def register():
     data = request.get_json()
@@ -2324,6 +3352,8 @@ def get_user(user_id):
     payload = row_to_user(user)
     payload["comments"] = comment_payloads
     payload["recentComment"] = comment_payloads[0] if comment_payloads else None
+    payload["avalonStats"] = avalon_stats_for_user(user_id)
+    payload["avalonHistory"] = avalon_history_for_user(user_id)
     return jsonify(payload)
 
 

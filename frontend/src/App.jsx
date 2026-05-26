@@ -314,7 +314,7 @@ function AppShell() {
                 <Route path="/gallery" element={<Gallery user={user} />} />
                 <Route path="/watchlist" element={<Watchlist user={user} />} />
                 <Route path="/watchlist/:itemId" element={<Watchlist user={user} />} />
-                <Route path="/avalon" element={<Avalon />} />
+                <Route path="/avalon" element={<Avalon user={user} />} />
                 <Route path="/spotify" element={<Spotify user={user} />} />
                 <Route path="/blog/:postId/:postTitle" element={<BlogPost user={user} />} />
                 <Route path="/edit/:postId" element={<EditPost />} />
