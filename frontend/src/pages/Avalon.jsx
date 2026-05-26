@@ -263,6 +263,7 @@ function OnlineAvalon({ user }) {
   const [password, setPassword] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
   const [error, setError] = useState("");
+  const isHost = lobby?.hostUserId === user?.id;
 
   const refreshLobbies = async () => {
     const data = await api(avalonApi("/avalon/lobbies"));
@@ -296,11 +297,41 @@ function OnlineAvalon({ user }) {
     if (!lobby?.id) return;
     const data = await api(avalonApi(`/avalon/lobbies/${lobby.id}`));
     if (!data?.lobby) throw new Error("The lobby response was empty. Please try again.");
+    if (!data.lobby.players?.some((player) => player.id === user?.id)) {
+      setLobby(null);
+      await refreshLobbies();
+      return;
+    }
     setLobby(data.lobby);
     if (data.lobby?.gameId && !game) {
       const gameData = await api(avalonApi(`/avalon/games/${data.lobby.gameId}`));
       if (!gameData?.game) throw new Error("The game response was empty. Please try again.");
       setGame(gameData.game);
+    }
+  };
+
+  const leaveLobby = async (silent = false) => {
+    if (!lobby?.id) return;
+    if (!silent) setError("");
+    try {
+      const data = await api(avalonApi(`/avalon/lobbies/${lobby.id}/leave`), { method: "POST" });
+      setLobby(data?.lobby || null);
+      setResumeSession(null);
+      await refreshLobbies();
+    } catch (err) {
+      if (!silent) setError(err.message);
+    }
+  };
+
+  const kickPlayer = async (playerId) => {
+    if (!lobby?.id) return;
+    setError("");
+    try {
+      const data = await api(avalonApi(`/avalon/lobbies/${lobby.id}/players/${playerId}/kick`), { method: "POST" });
+      setLobby(data?.lobby || null);
+      await refreshLobbies();
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -319,6 +350,23 @@ function OnlineAvalon({ user }) {
     }, 2000);
     return () => window.clearInterval(timer);
   }, [game?.id, lobby?.id]);
+
+  useEffect(() => {
+    if (!lobby?.id || game?.id) return undefined;
+    const lobbyId = lobby.id;
+    const leaveOnExit = () => {
+      fetch(avalonApi(`/avalon/lobbies/${lobbyId}/leave`), {
+        method: "POST",
+        credentials: "include",
+        keepalive: true,
+      }).catch(() => {});
+    };
+    window.addEventListener("pagehide", leaveOnExit);
+    return () => {
+      window.removeEventListener("pagehide", leaveOnExit);
+      leaveOnExit();
+    };
+  }, [lobby?.id, game?.id]);
 
   const post = async (path, body = {}) => {
     setError("");
@@ -353,7 +401,7 @@ function OnlineAvalon({ user }) {
 
   const joinedLobby = lobby?.players?.some((player) => player.id === user?.id);
   const readyPlayer = lobby?.players?.find((player) => player.id === user?.id);
-  const canStart = lobby && lobby.hostUserId === user?.id && lobby.players.length >= 5 && lobby.players.every((player) => player.ready);
+  const canStart = lobby && isHost && lobby.players.length >= 5 && lobby.players.every((player) => player.ready);
 
   if (game) {
     return <OnlineGame game={game} setGame={setGame} refreshGame={refreshGame} setError={setError} />;
@@ -382,30 +430,45 @@ function OnlineAvalon({ user }) {
         </Paper>
       )}
       {!game && !lobby && checkingResume && <Alert severity="info">Checking for an active Avalon game...</Alert>}
-      <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
-        <Stack spacing={2}>
-          <Typography variant="h2" color="blog.subheading">Create lobby</Typography>
-          <TextField label="Lobby name" value={name} onChange={(event) => setName(event.target.value)} />
-          <TextField label="Optional password" value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
-          <Button variant="contained" startIcon={<GroupsIcon />} onClick={() => post("/avalon/lobbies", { name, password })}>Create online lobby</Button>
-        </Stack>
-      </Paper>
 
-      {lobby && (
+      {lobby ? (
         <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
-          <Stack spacing={2}>
-            <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1.5}>
+          <Stack spacing={2.5}>
+            <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1.5} alignItems={{ md: "center" }}>
               <Box>
                 <Typography variant="h2" color="blog.subheading">{lobby.name}</Typography>
-                <Typography color="text.secondary">{lobby.players.length}/10 players · {lobby.status}</Typography>
+                <Typography color="text.secondary">
+                  {lobby.players.length}/{lobby.maxPlayers} players · {isHost ? "You are host" : `Host: ${userName(lobby.host)}`}
+                </Typography>
               </Box>
-              <Button startIcon={<RefreshIcon />} onClick={refreshLobby}>Refresh</Button>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                <Button startIcon={<RefreshIcon />} onClick={refreshLobby}>Refresh</Button>
+                <Button color="error" variant="outlined" onClick={() => leaveLobby()}>Leave lobby</Button>
+              </Stack>
             </Stack>
-            <Stack direction="row" flexWrap="wrap" spacing={1} useFlexGap>
+
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 1.5 }}>
               {lobby.players.map((player) => (
-                <Chip key={player.id} label={`${userName(player)}${player.ready ? " · ready" : ""}`} color={player.ready ? "info" : "default"} variant={player.id === lobby.hostUserId ? "filled" : "outlined"} />
+                <Paper key={player.id} variant="outlined" sx={{ p: 1.5, boxShadow: "none" }}>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ sm: "center" }}>
+                    <Box>
+                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                        <Typography variant="h3" color="blog.subheading" sx={{ overflowWrap: "anywhere" }}>{userName(player)}</Typography>
+                        {player.id === lobby.hostUserId && <Chip size="small" label="Host" color="secondary" />}
+                        <Chip size="small" label={player.ready ? "Ready" : "Not ready"} color={player.ready ? "info" : "default"} variant="outlined" />
+                      </Stack>
+                      <Typography color="text.secondary">{player.mmr || 1000} Elo</Typography>
+                    </Box>
+                    {isHost && player.id !== user?.id && (
+                      <Button size="small" color="error" variant="outlined" onClick={() => kickPlayer(player.id)}>
+                        Kick
+                      </Button>
+                    )}
+                  </Stack>
+                </Paper>
               ))}
-            </Stack>
+            </Box>
+
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
               {joinedLobby && (
                 <Button variant="outlined" onClick={() => post(`/avalon/lobbies/${lobby.id}/ready`, { ready: !readyPlayer?.ready })}>
@@ -413,48 +476,59 @@ function OnlineAvalon({ user }) {
                 </Button>
               )}
               {canStart && <Button variant="contained" startIcon={<CasinoIcon />} onClick={() => post(`/avalon/lobbies/${lobby.id}/start`)}>Start game</Button>}
+              {isHost && lobby.players.length < 5 && (
+                <Alert severity="info" sx={{ flex: 1 }}>Avalon online needs at least 5 players to start.</Alert>
+              )}
             </Stack>
           </Stack>
         </Paper>
-      )}
+      ) : (
+        <>
+          <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
+            <Stack spacing={2}>
+              <Typography variant="h2" color="blog.subheading">Create lobby</Typography>
+              <TextField label="Lobby name" value={name} onChange={(event) => setName(event.target.value)} />
+              <TextField label="Optional password" value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
+              <Button variant="contained" startIcon={<GroupsIcon />} onClick={() => post("/avalon/lobbies", { name, password })}>Create online lobby</Button>
+            </Stack>
+          </Paper>
 
-      <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
-        <Stack spacing={2}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h2" color="blog.subheading">Active lobbies</Typography>
-            <Button startIcon={<RefreshIcon />} onClick={refreshLobbies}>Refresh</Button>
-          </Stack>
-          <Stack spacing={1.5}>
-            {lobbies.length ? lobbies.map((item) => (
-              <Paper key={item.id} variant="outlined" sx={{ p: 2, boxShadow: "none" }}>
-                <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ md: "center" }}>
-                  <Box>
-                    <Typography variant="h3" color="blog.subheading" sx={{ overflowWrap: "anywhere" }}>{item.name}</Typography>
-                    <Typography color="text.secondary">
-                      Hosted by {userName(item.host)} · {item.playerCount}/{item.maxPlayers} players · {item.status}
-                    </Typography>
-                  </Box>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                    {item.hasPassword && <TextField size="small" label="Password" value={joinPassword} onChange={(event) => setJoinPassword(event.target.value)} type="password" />}
-                    <Button
-                      variant="outlined"
-                      startIcon={item.hasPassword ? <LockIcon /> : null}
-                      onClick={() => item.gameId ? api(avalonApi(`/avalon/games/${item.gameId}`)).then((data) => {
-                        setGame(data.game);
-                        setResumeSession(null);
-                      }).catch((err) => setError(err.message)) : post(`/avalon/lobbies/${item.id}/join`, { password: joinPassword })}
-                    >
-                      {item.gameId ? "Open game" : "Join"}
-                    </Button>
-                  </Stack>
-                </Stack>
-              </Paper>
-            )) : (
-              <Typography color="text.secondary">No active online lobbies yet.</Typography>
-            )}
-          </Stack>
-        </Stack>
-      </Paper>
+          <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
+            <Stack spacing={2}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
+                <Typography variant="h2" color="blog.subheading">Active lobbies</Typography>
+                <Button startIcon={<RefreshIcon />} onClick={refreshLobbies}>Refresh</Button>
+              </Stack>
+              <Stack spacing={1.5}>
+                {lobbies.length ? lobbies.map((item) => (
+                  <Paper key={item.id} variant="outlined" sx={{ p: 2, boxShadow: "none" }}>
+                    <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ md: "center" }}>
+                      <Box>
+                        <Typography variant="h3" color="blog.subheading" sx={{ overflowWrap: "anywhere" }}>{item.name}</Typography>
+                        <Typography color="text.secondary">
+                          Hosted by {userName(item.host)} · {item.playerCount}/{item.maxPlayers} players
+                        </Typography>
+                      </Box>
+                      <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                        {item.hasPassword && <TextField size="small" label="Password" value={joinPassword} onChange={(event) => setJoinPassword(event.target.value)} type="password" />}
+                        <Button
+                          variant="outlined"
+                          startIcon={item.hasPassword ? <LockIcon /> : null}
+                          onClick={() => post(`/avalon/lobbies/${item.id}/join`, { password: joinPassword })}
+                        >
+                          Join
+                        </Button>
+                      </Stack>
+                    </Stack>
+                  </Paper>
+                )) : (
+                  <Typography color="text.secondary">No active online lobbies yet.</Typography>
+                )}
+              </Stack>
+            </Stack>
+          </Paper>
+        </>
+      )}
     </Stack>
   );
 }

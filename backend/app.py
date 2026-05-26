@@ -2168,7 +2168,40 @@ def avalon_lobby_players(lobby_id):
         """,
         (lobby_id,),
     ).fetchall()
-    return [{**row_to_user(row), "ready": bool(row["ready"]), "joinedAt": row["joined_at"]} for row in rows]
+    return [
+        {
+            **row_to_user(row),
+            "ready": bool(row["ready"]),
+            "joinedAt": row["joined_at"],
+            "mmr": avalon_stats_for_user(row["id"])["mmr"],
+        }
+        for row in rows
+    ]
+
+
+def avalon_cleanup_empty_lobbies():
+    get_db().execute(
+        """
+        UPDATE avalon_lobbies
+        SET status = 'closed'
+        WHERE status = 'waiting'
+          AND NOT EXISTS (
+            SELECT 1 FROM avalon_lobby_players
+            WHERE avalon_lobby_players.lobby_id = avalon_lobbies.id
+          )
+        """
+    )
+
+
+def avalon_remove_lobby_player(db, lobby, user_id):
+    db.execute("DELETE FROM avalon_lobby_players WHERE lobby_id = ? AND user_id = ?", (lobby["id"], user_id))
+    remaining = db.execute("SELECT user_id FROM avalon_lobby_players WHERE lobby_id = ? ORDER BY RANDOM() LIMIT 1", (lobby["id"],)).fetchone()
+    if not remaining:
+        db.execute("UPDATE avalon_lobbies SET status = 'closed' WHERE id = ?", (lobby["id"],))
+        return None
+    if lobby["host_user_id"] == user_id:
+        db.execute("UPDATE avalon_lobbies SET host_user_id = ? WHERE id = ?", (remaining["user_id"], lobby["id"]))
+    return db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby["id"],)).fetchone()
 
 
 def avalon_lobby_payload(lobby):
@@ -2495,10 +2528,12 @@ def avalon_history_for_user(user_id, limit=20):
 @app.route("/avalon/lobbies", methods=["GET"])
 def avalon_list_lobbies():
     db = get_db()
+    avalon_cleanup_empty_lobbies()
+    db.commit()
     lobbies = db.execute(
         """
         SELECT * FROM avalon_lobbies
-        WHERE status IN ('waiting', 'in_progress')
+        WHERE status = 'waiting'
         ORDER BY created_at DESC, id DESC
         LIMIT 50
         """
@@ -2512,6 +2547,8 @@ def avalon_current_session():
     if error:
         return error
     db = get_db()
+    avalon_cleanup_empty_lobbies()
+    db.commit()
     game = db.execute(
         """
         SELECT g.*
@@ -2552,6 +2589,20 @@ def avalon_create_lobby():
     password = (data.get("password") or "").strip()
     max_players = max(5, min(int(data.get("maxPlayers") or 10), 10))
     db = get_db()
+    avalon_cleanup_empty_lobbies()
+    existing = db.execute(
+        """
+        SELECT l.id
+        FROM avalon_lobbies l
+        JOIN avalon_lobby_players lp ON lp.lobby_id = l.id
+        WHERE lp.user_id = ? AND l.status = 'waiting'
+        LIMIT 1
+        """,
+        (user["id"],),
+    ).fetchone()
+    if existing:
+        db.commit()
+        return {"error": "Leave your current lobby before creating another one"}, 400
     cursor = db.execute(
         "INSERT INTO avalon_lobbies (name, host_user_id, password_hash, max_players) VALUES (?, ?, ?, ?)",
         (name, user["id"], generate_password_hash(password) if password else "", max_players),
@@ -2568,7 +2619,10 @@ def avalon_create_lobby():
 
 @app.route("/avalon/lobbies/<int:lobby_id>", methods=["GET"])
 def avalon_get_lobby(lobby_id):
-    lobby = get_db().execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    db = get_db()
+    avalon_cleanup_empty_lobbies()
+    db.commit()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
     if not lobby:
         return {"error": "Lobby not found"}, 404
     return jsonify({"lobby": avalon_lobby_payload(lobby)})
@@ -2582,6 +2636,20 @@ def avalon_join_lobby(lobby_id):
     data = request.get_json() or {}
     password = (data.get("password") or "").strip()
     db = get_db()
+    avalon_cleanup_empty_lobbies()
+    existing = db.execute(
+        """
+        SELECT l.id
+        FROM avalon_lobbies l
+        JOIN avalon_lobby_players lp ON lp.lobby_id = l.id
+        WHERE lp.user_id = ? AND l.status = 'waiting'
+        LIMIT 1
+        """,
+        (user["id"],),
+    ).fetchone()
+    if existing and existing["id"] != lobby_id:
+        db.commit()
+        return {"error": "Leave your current lobby before joining another one"}, 400
     lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
     if not lobby:
         return {"error": "Lobby not found"}, 404
@@ -2631,15 +2699,33 @@ def avalon_leave_lobby(lobby_id):
         return {"error": "Lobby not found"}, 404
     if lobby["status"] != "waiting":
         return {"error": "Game has already started"}, 400
-    db.execute("DELETE FROM avalon_lobby_players WHERE lobby_id = ? AND user_id = ?", (lobby_id, user["id"]))
-    remaining = db.execute("SELECT user_id FROM avalon_lobby_players WHERE lobby_id = ? ORDER BY joined_at ASC LIMIT 1", (lobby_id,)).fetchone()
-    if not remaining:
-        db.execute("UPDATE avalon_lobbies SET status = 'closed' WHERE id = ?", (lobby_id,))
-    elif lobby["host_user_id"] == user["id"]:
-        db.execute("UPDATE avalon_lobbies SET host_user_id = ? WHERE id = ?", (remaining["user_id"], lobby_id))
+    if not db.execute("SELECT id FROM avalon_lobby_players WHERE lobby_id = ? AND user_id = ?", (lobby_id, user["id"])).fetchone():
+        return {"error": "You are not in this lobby"}, 404
+    lobby = avalon_remove_lobby_player(db, lobby, user["id"])
     db.commit()
+    return jsonify({"lobby": avalon_lobby_payload(lobby) if lobby else None})
+
+
+@app.route("/avalon/lobbies/<int:lobby_id>/players/<int:player_id>/kick", methods=["POST"])
+def avalon_kick_lobby_player(lobby_id, player_id):
+    user, error = require_user()
+    if error:
+        return error
+    db = get_db()
     lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
-    return jsonify({"lobby": avalon_lobby_payload(lobby)})
+    if not lobby:
+        return {"error": "Lobby not found"}, 404
+    if lobby["status"] != "waiting":
+        return {"error": "Game has already started"}, 400
+    if lobby["host_user_id"] != user["id"]:
+        return {"error": "Only the host can kick players"}, 403
+    if player_id == user["id"]:
+        return {"error": "Use Leave lobby to leave yourself"}, 400
+    if not db.execute("SELECT id FROM avalon_lobby_players WHERE lobby_id = ? AND user_id = ?", (lobby_id, player_id)).fetchone():
+        return {"error": "That player is not in this lobby"}, 404
+    lobby = avalon_remove_lobby_player(db, lobby, player_id)
+    db.commit()
+    return jsonify({"lobby": avalon_lobby_payload(lobby) if lobby else None})
 
 
 @app.route("/avalon/lobbies/<int:lobby_id>/start", methods=["POST"])
