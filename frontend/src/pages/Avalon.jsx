@@ -257,6 +257,8 @@ function OnlineAvalon({ user }) {
   const [lobbies, setLobbies] = useState([]);
   const [lobby, setLobby] = useState(null);
   const [game, setGame] = useState(null);
+  const [resumeSession, setResumeSession] = useState(null);
+  const [checkingResume, setCheckingResume] = useState(true);
   const [name, setName] = useState("Avalon lobby");
   const [password, setPassword] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
@@ -265,6 +267,22 @@ function OnlineAvalon({ user }) {
   const refreshLobbies = async () => {
     const data = await api(avalonApi("/avalon/lobbies"));
     setLobbies(Array.isArray(data?.lobbies) ? data.lobbies : []);
+  };
+
+  const refreshResumeSession = async () => {
+    setCheckingResume(true);
+    try {
+      const data = await api(avalonApi("/avalon/current"));
+      if (data?.game) {
+        setResumeSession({ type: "game", game: data.game });
+      } else if (data?.lobby) {
+        setResumeSession({ type: "lobby", lobby: data.lobby });
+      } else {
+        setResumeSession(null);
+      }
+    } finally {
+      setCheckingResume(false);
+    }
   };
 
   const refreshGame = async () => {
@@ -287,7 +305,10 @@ function OnlineAvalon({ user }) {
   };
 
   useEffect(() => {
-    refreshLobbies().catch((err) => setError(err.message));
+    Promise.all([refreshLobbies(), refreshResumeSession()]).catch((err) => {
+      setCheckingResume(false);
+      setError(err.message);
+    });
   }, []);
 
   useEffect(() => {
@@ -303,12 +324,30 @@ function OnlineAvalon({ user }) {
     setError("");
     try {
       const data = await api(avalonApi(path), { method: "POST", body: JSON.stringify(body) });
-      if (data.game) setGame(data.game);
-      if (data.lobby) setLobby(data.lobby);
+      if (data.game) {
+        setGame(data.game);
+        setResumeSession(null);
+      }
+      if (data.lobby) {
+        setLobby(data.lobby);
+        setResumeSession(null);
+      }
       if (!data?.game && !data?.lobby) throw new Error("The Avalon response was empty. Please try again.");
       await refreshLobbies();
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const resumeAvalon = () => {
+    if (resumeSession?.game) {
+      setGame(resumeSession.game);
+      setLobby(null);
+      setResumeSession(null);
+    } else if (resumeSession?.lobby) {
+      setLobby(resumeSession.lobby);
+      setGame(null);
+      setResumeSession(null);
     }
   };
 
@@ -323,6 +362,26 @@ function OnlineAvalon({ user }) {
   return (
     <Stack spacing={3}>
       {error && <Alert severity="error">{error}</Alert>}
+      {!game && !lobby && resumeSession && (
+        <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between" alignItems={{ md: "center" }}>
+            <Box>
+              <Typography variant="h2" color="blog.subheading">
+                {resumeSession.type === "game" ? "Resume your game" : "Rejoin your lobby"}
+              </Typography>
+              <Typography color="text.secondary">
+                {resumeSession.type === "game"
+                  ? `You are still in an active ${resumeSession.game.currentPhase.replace("_", " ")} phase game.`
+                  : `You are still in ${resumeSession.lobby.name}.`}
+              </Typography>
+            </Box>
+            <Button variant="contained" startIcon={<RefreshIcon />} onClick={resumeAvalon}>
+              {resumeSession.type === "game" ? "Resume game" : "Rejoin lobby"}
+            </Button>
+          </Stack>
+        </Paper>
+      )}
+      {!game && !lobby && checkingResume && <Alert severity="info">Checking for an active Avalon game...</Alert>}
       <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
         <Stack spacing={2}>
           <Typography variant="h2" color="blog.subheading">Create lobby</Typography>
@@ -380,7 +439,10 @@ function OnlineAvalon({ user }) {
                     <Button
                       variant="outlined"
                       startIcon={item.hasPassword ? <LockIcon /> : null}
-                      onClick={() => item.gameId ? api(avalonApi(`/avalon/games/${item.gameId}`)).then((data) => setGame(data.game)).catch((err) => setError(err.message)) : post(`/avalon/lobbies/${item.id}/join`, { password: joinPassword })}
+                      onClick={() => item.gameId ? api(avalonApi(`/avalon/games/${item.gameId}`)).then((data) => {
+                        setGame(data.game);
+                        setResumeSession(null);
+                      }).catch((err) => setError(err.message)) : post(`/avalon/lobbies/${item.id}/join`, { password: joinPassword })}
                     >
                       {item.gameId ? "Open game" : "Join"}
                     </Button>
@@ -405,6 +467,19 @@ export default function Avalon({ user }) {
     offline: "One-phone role reveals and quest tracking.",
     online: "Own-phone roles, votes, quest cards, stats, and history.",
   }), []);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    let cancelled = false;
+    api(avalonApi("/avalon/current"))
+      .then((data) => {
+        if (!cancelled && (data?.game || data?.lobby)) setMode("online");
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [loggedIn]);
 
   return (
     <Stack spacing={4} sx={{ width: "100%", maxWidth: "100%", minWidth: 0, overflowX: "hidden", boxSizing: "border-box" }}>

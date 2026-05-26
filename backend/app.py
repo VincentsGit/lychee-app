@@ -2506,6 +2506,42 @@ def avalon_list_lobbies():
     return jsonify({"lobbies": [avalon_lobby_payload(lobby) for lobby in lobbies]})
 
 
+@app.route("/avalon/current", methods=["GET"])
+def avalon_current_session():
+    user, error = require_user()
+    if error:
+        return error
+    db = get_db()
+    game = db.execute(
+        """
+        SELECT g.*
+        FROM avalon_games g
+        JOIN avalon_game_players gp ON gp.game_id = g.id
+        WHERE gp.user_id = ? AND g.status = 'in_progress'
+        ORDER BY g.started_at DESC, g.id DESC
+        LIMIT 1
+        """,
+        (user["id"],),
+    ).fetchone()
+    if game:
+        game_payload = avalon_game_payload(game["id"], user["id"])
+        if game_payload and game_payload["status"] == "in_progress":
+            return jsonify({"game": game_payload, "lobby": None})
+
+    lobby = db.execute(
+        """
+        SELECT l.*
+        FROM avalon_lobbies l
+        JOIN avalon_lobby_players lp ON lp.lobby_id = l.id
+        WHERE lp.user_id = ? AND l.status = 'waiting'
+        ORDER BY l.created_at DESC, l.id DESC
+        LIMIT 1
+        """,
+        (user["id"],),
+    ).fetchone()
+    return jsonify({"game": None, "lobby": avalon_lobby_payload(lobby) if lobby else None})
+
+
 @app.route("/avalon/lobbies", methods=["POST"])
 def avalon_create_lobby():
     user, error = require_user()
