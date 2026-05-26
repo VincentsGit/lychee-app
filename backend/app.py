@@ -2353,9 +2353,14 @@ def avalon_finish_game(game_id, winner, assassin_user_id=None, assassin_target_u
         (winner, now, game_id),
     )
     db.execute(
-        "UPDATE avalon_lobbies SET status = 'finished', finished_at = ? WHERE id = ?",
+        """
+        UPDATE avalon_lobbies
+        SET status = 'waiting', game_id = NULL, started_at = NULL, finished_at = ?, expires_at = NULL
+        WHERE id = ?
+        """,
         (now, game["lobby_id"]),
     )
+    db.execute("UPDATE avalon_lobby_players SET ready = 0 WHERE lobby_id = ?", (game["lobby_id"],))
     avalon_event(game_id, "game_finished", f"{winner.title()} wins", {"winner": winner})
 
 
@@ -2483,19 +2488,24 @@ def avalon_game_payload(game_id, viewer_id=None):
     }
 
 
-def avalon_history_for_user(user_id, limit=20):
+def avalon_history_for_user(user_id, limit=None):
     db = get_db()
+    params = [user_id]
+    limit_clause = ""
+    if limit is not None:
+        limit_clause = "LIMIT ?"
+        params.append(limit)
     games = db.execute(
-        """
+        f"""
         SELECT gp.role, gp.team, gp.final_result, gp.mmr_before, gp.mmr_after,
                g.id, g.winner, g.started_at, g.finished_at, g.status
         FROM avalon_game_players gp
         JOIN avalon_games g ON g.id = gp.game_id
         WHERE gp.user_id = ? AND g.status = 'finished'
         ORDER BY g.finished_at DESC, g.id DESC
-        LIMIT ?
+        {limit_clause}
         """,
-        (user_id, limit),
+        params,
     ).fetchall()
     history = []
     for game in games:
@@ -2503,6 +2513,7 @@ def avalon_history_for_user(user_id, limit=20):
             "SELECT id, created_at, event_type, message FROM avalon_events WHERE game_id = ? ORDER BY created_at ASC, id ASC",
             (game["id"],),
         ).fetchall()
+        players = avalon_game_players(game["id"])
         started_at = parse_db_datetime(game["started_at"])
         finished_at = parse_db_datetime(game["finished_at"])
         duration = int((finished_at - started_at).total_seconds()) if started_at and finished_at else 0
@@ -2521,6 +2532,17 @@ def avalon_history_for_user(user_id, limit=20):
                 {"id": event["id"], "createdAt": event["created_at"], "type": event["event_type"], "message": event["message"]}
                 for event in events
             ],
+            "players": [
+                {
+                    "user": avalon_player_user_payload(player),
+                    "role": player["role"],
+                    "team": player["team"],
+                    "result": player["final_result"],
+                    "mmrBefore": player["mmr_before"],
+                    "mmrAfter": player["mmr_after"],
+                }
+                for player in players
+            ],
         })
     return history
 
@@ -2533,7 +2555,7 @@ def avalon_list_lobbies():
     lobbies = db.execute(
         """
         SELECT * FROM avalon_lobbies
-        WHERE status = 'waiting'
+        WHERE status IN ('waiting', 'in_progress')
         ORDER BY created_at DESC, id DESC
         LIMIT 50
         """
@@ -3042,6 +3064,34 @@ def avalon_user_stats_endpoint(user_id):
 @app.route("/users/<int:user_id>/avalon-history", methods=["GET"])
 def avalon_user_history_endpoint(user_id):
     return jsonify({"history": avalon_history_for_user(user_id)})
+
+
+@app.route("/avalon/leaderboard", methods=["GET"])
+def avalon_leaderboard():
+    rows = get_db().execute(
+        """
+        SELECT users.id, users.username, users.display_name, users.about_me, users.avatar_url, users.created_at,
+               avalon_user_stats.games_played, avalon_user_stats.games_won, avalon_user_stats.games_lost,
+               avalon_user_stats.mmr
+        FROM avalon_user_stats
+        JOIN users ON users.id = avalon_user_stats.user_id
+        WHERE avalon_user_stats.games_played > 0
+        ORDER BY avalon_user_stats.mmr DESC, avalon_user_stats.games_won DESC, users.username ASC
+        LIMIT 100
+        """
+    ).fetchall()
+    return jsonify({
+        "players": [
+            {
+                "user": row_to_user(row),
+                "mmr": row["mmr"] or 1000,
+                "gamesPlayed": row["games_played"] or 0,
+                "gamesWon": row["games_won"] or 0,
+                "gamesLost": row["games_lost"] or 0,
+            }
+            for row in rows
+        ]
+    })
 
 
 @app.route("/register", methods=["POST"])

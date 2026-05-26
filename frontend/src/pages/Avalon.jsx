@@ -4,6 +4,7 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import LockIcon from "@mui/icons-material/Lock";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import RestartAltIcon from "@mui/icons-material/RestartAlt";
+import { Link as RouterLink } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -25,6 +26,14 @@ const formatDuration = (seconds = 0) => {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
   const remainder = Math.floor(seconds % 60).toString().padStart(2, "0");
   return `${minutes}:${remainder}`;
+};
+
+const formatEventTime = (eventTime, startedAt) => {
+  const eventDate = new Date(eventTime);
+  const startDate = new Date(startedAt);
+  if (Number.isNaN(eventDate.getTime()) || Number.isNaN(startDate.getTime())) return "00:00";
+  const elapsedMs = Math.max(0, eventDate.getTime() - startDate.getTime());
+  return formatDuration(Math.floor(elapsedMs / 1000));
 };
 
 const userName = (user) => user?.displayName || user?.username || "Unknown";
@@ -63,7 +72,7 @@ function QuestBoard({ game }) {
   );
 }
 
-function OnlineGame({ game, setGame, refreshGame, setError }) {
+function OnlineGame({ game, setGame, refreshGame, setError, returnToLobby }) {
   const [selectedTeam, setSelectedTeam] = useState([]);
   const [busy, setBusy] = useState(false);
   const viewer = game.viewer || {};
@@ -126,8 +135,11 @@ function OnlineGame({ game, setGame, refreshGame, setError }) {
           <QuestBoard game={game} />
 
           {game.status !== "in_progress" && (
-            <Alert severity={game.winner === "good" ? "info" : game.winner === "evil" ? "error" : "warning"}>
-              {game.status === "expired" ? "This game expired." : `${game.winner === "good" ? "Good" : "Evil"} wins.`}
+            <Alert
+              severity={game.winner === "good" ? "info" : game.winner === "evil" ? "error" : "warning"}
+              action={game.status === "finished" ? <Button color="inherit" size="small" onClick={returnToLobby}>Back to lobby</Button> : null}
+            >
+              {game.status === "expired" ? "This game expired." : `${game.winner === "good" ? "Good" : "Evil"} wins. The lobby is open again.`}
             </Alert>
           )}
 
@@ -244,7 +256,7 @@ function OnlineGame({ game, setGame, refreshGame, setError }) {
           <Typography variant="h2" color="blog.subheading">Timeline</Typography>
           {(game.events || []).map((event) => (
             <Typography key={event.id} color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
-              {new Date(event.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {event.message}
+              {formatEventTime(event.createdAt, game.startedAt)} · {event.message}
             </Typography>
           ))}
         </Stack>
@@ -399,12 +411,25 @@ function OnlineAvalon({ user }) {
     }
   };
 
+  const returnToLobby = async () => {
+    setError("");
+    try {
+      const data = await api(avalonApi("/avalon/current"));
+      setGame(null);
+      setLobby(data?.lobby || null);
+      setResumeSession(null);
+      await refreshLobbies();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const joinedLobby = lobby?.players?.some((player) => player.id === user?.id);
   const readyPlayer = lobby?.players?.find((player) => player.id === user?.id);
   const canStart = lobby && isHost && lobby.players.length >= 5 && lobby.players.every((player) => player.ready);
 
   if (game) {
-    return <OnlineGame game={game} setGame={setGame} refreshGame={refreshGame} setError={setError} />;
+    return <OnlineGame game={game} setGame={setGame} refreshGame={refreshGame} setError={setError} returnToLobby={returnToLobby} />;
   }
 
   return (
@@ -506,17 +531,18 @@ function OnlineAvalon({ user }) {
                       <Box>
                         <Typography variant="h3" color="blog.subheading" sx={{ overflowWrap: "anywhere" }}>{item.name}</Typography>
                         <Typography color="text.secondary">
-                          Hosted by {userName(item.host)} · {item.playerCount}/{item.maxPlayers} players
+                          Hosted by {userName(item.host)} · {item.playerCount}/{item.maxPlayers} players · {item.status === "in_progress" ? "in game" : "open"}
                         </Typography>
                       </Box>
                       <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
-                        {item.hasPassword && <TextField size="small" label="Password" value={joinPassword} onChange={(event) => setJoinPassword(event.target.value)} type="password" />}
+                        {item.hasPassword && item.status === "waiting" && <TextField size="small" label="Password" value={joinPassword} onChange={(event) => setJoinPassword(event.target.value)} type="password" />}
                         <Button
                           variant="outlined"
                           startIcon={item.hasPassword ? <LockIcon /> : null}
+                          disabled={item.status !== "waiting"}
                           onClick={() => post(`/avalon/lobbies/${item.id}/join`, { password: joinPassword })}
                         >
-                          Join
+                          {item.status === "waiting" ? "Join" : "Locked"}
                         </Button>
                       </Stack>
                     </Stack>
@@ -533,6 +559,60 @@ function OnlineAvalon({ user }) {
   );
 }
 
+function AvalonLeaderboard() {
+  const [players, setPlayers] = useState([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api(avalonApi("/avalon/leaderboard"))
+      .then((data) => setPlayers(Array.isArray(data?.players) ? data.players : []))
+      .catch((err) => setError(err.message));
+  }, []);
+
+  if (error) return <Alert severity="error">{error}</Alert>;
+
+  return (
+    <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3.5 } }}>
+      <Stack spacing={2}>
+        <Box>
+          <Typography variant="h2" color="blog.subheading">Leaderboard</Typography>
+          <Typography color="text.secondary">Highest ranking Avalon players with at least one finished game.</Typography>
+        </Box>
+        <Stack spacing={1.25}>
+          {players.length ? players.map((entry, index) => (
+            <Paper key={entry.user.id} variant="outlined" sx={{ p: 1.5, boxShadow: "none" }}>
+              <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ sm: "center" }}>
+                <Stack direction="row" spacing={1.5} alignItems="center">
+                  <Chip label={`#${index + 1}`} color={index < 3 ? "secondary" : "default"} />
+                  <Box>
+                    <Typography
+                      component={RouterLink}
+                      to={`/users/${entry.user.id}`}
+                      variant="h3"
+                      color="blog.subheading"
+                      sx={{ textDecoration: "none", overflowWrap: "anywhere" }}
+                    >
+                      {userName(entry.user)}
+                    </Typography>
+                    <Typography color="text.secondary">@{entry.user.username}</Typography>
+                  </Box>
+                </Stack>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                  <Chip label={`${entry.mmr} Elo`} color="info" />
+                  <Chip label={`${entry.gamesPlayed} games`} variant="outlined" />
+                  <Chip label={`${entry.gamesWon}W ${entry.gamesLost}L`} variant="outlined" />
+                </Stack>
+              </Stack>
+            </Paper>
+          )) : (
+            <Typography color="text.secondary">No ranked Avalon players yet.</Typography>
+          )}
+        </Stack>
+      </Stack>
+    </Paper>
+  );
+}
+
 export default function Avalon({ user }) {
   const [mode, setMode] = useState("offline");
   const loggedIn = Boolean(user?.id);
@@ -540,6 +620,7 @@ export default function Avalon({ user }) {
   const modeCopy = useMemo(() => ({
     offline: "One-phone role reveals and quest tracking.",
     online: "Own-phone roles, votes, quest cards, stats, and history.",
+    leaderboard: "Highest ranking Avalon players.",
   }), []);
 
   useEffect(() => {
@@ -572,6 +653,9 @@ export default function Avalon({ user }) {
             <Button variant={mode === "online" ? "contained" : "outlined"} startIcon={<GroupsIcon />} disabled={!loggedIn} onClick={() => setMode("online")}>
               Online
             </Button>
+            <Button variant={mode === "leaderboard" ? "contained" : "outlined"} startIcon={<CasinoIcon />} onClick={() => setMode("leaderboard")}>
+              Leaderboard
+            </Button>
           </Stack>
           <Alert severity={mode === "online" ? "info" : "success"} sx={{ maxWidth: { xs: "calc(100vw - 64px)", sm: "100%" }, overflow: "hidden" }}>
             {modeCopy[mode]}
@@ -586,7 +670,7 @@ export default function Avalon({ user }) {
 
       <Divider />
 
-      {mode === "online" && loggedIn ? <OnlineAvalon user={user} /> : <AvalonOffline />}
+      {mode === "leaderboard" ? <AvalonLeaderboard /> : mode === "online" && loggedIn ? <OnlineAvalon user={user} /> : <AvalonOffline />}
     </Stack>
   );
 }

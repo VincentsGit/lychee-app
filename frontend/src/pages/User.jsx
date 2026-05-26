@@ -11,6 +11,20 @@ function postPath(comment) {
   return `/blog/${comment.post.id}/${encodeURIComponent(title)}`;
 }
 
+function formatDuration(seconds = 0) {
+  const minutes = Math.floor(seconds / 60).toString().padStart(2, "0");
+  const remainder = Math.floor(seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${remainder}`;
+}
+
+function formatEventTime(eventTime, startedAt) {
+  const eventDate = new Date(eventTime);
+  const startDate = new Date(startedAt);
+  if (Number.isNaN(eventDate.getTime()) || Number.isNaN(startDate.getTime())) return "00:00";
+  const elapsedMs = Math.max(0, eventDate.getTime() - startDate.getTime());
+  return formatDuration(Math.floor(elapsedMs / 1000));
+}
+
 export default function User() {
   const { userId } = useParams();
   const [profile, setProfile] = useState(null);
@@ -27,6 +41,12 @@ export default function User() {
   if (!profile) return null;
   const avalonStats = profile.avalonStats || {};
   const avalonHistory = profile.avalonHistory || [];
+  const matchesPerPage = 10;
+  const totalMatches = avalonHistory.length;
+  const totalMatchPages = Math.max(1, Math.ceil(totalMatches / matchesPerPage));
+  const matchPage = Math.min(Math.max(1, expandedMatchId?.page || 1), totalMatchPages);
+  const visibleMatches = avalonHistory.slice((matchPage - 1) * matchesPerPage, matchPage * matchesPerPage);
+  const expandedGameId = expandedMatchId?.gameId || null;
 
   return (
     <Stack spacing={3}>
@@ -84,8 +104,31 @@ export default function User() {
               <Typography variant="h3" color="blog.subheading">Match history</Typography>
               {avalonHistory.length ? (
                 <Stack spacing={1.5} sx={{ mt: 1.5 }}>
-                  {avalonHistory.map((match) => {
-                    const expanded = expandedMatchId === match.gameId;
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1} justifyContent="space-between" alignItems={{ sm: "center" }}>
+                    <Typography color="text.secondary">
+                      Showing {visibleMatches.length} games of {totalMatches} · page {matchPage} of {totalMatchPages}
+                    </Typography>
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={matchPage <= 1}
+                        onClick={() => setExpandedMatchId({ page: matchPage - 1, gameId: null })}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={matchPage >= totalMatchPages}
+                        onClick={() => setExpandedMatchId({ page: matchPage + 1, gameId: null })}
+                      >
+                        Next
+                      </Button>
+                    </Stack>
+                  </Stack>
+                  {visibleMatches.map((match) => {
+                    const expanded = expandedGameId === match.gameId;
                     return (
                       <Paper key={match.gameId} variant="outlined" sx={{ p: 1.5, boxShadow: "none" }}>
                         <Stack spacing={1}>
@@ -98,18 +141,34 @@ export default function User() {
                               <Chip label={match.role} variant="outlined" />
                               <Chip label={`${match.mmrAfter - match.mmrBefore >= 0 ? "+" : ""}${match.mmrAfter - match.mmrBefore} MMR`} variant="outlined" />
                             </Stack>
-                            <Button size="small" variant="text" onClick={() => setExpandedMatchId(expanded ? null : match.gameId)}>
+                            <Button size="small" variant="text" onClick={() => setExpandedMatchId({ page: matchPage, gameId: expanded ? null : match.gameId })}>
                               {expanded ? "Hide" : "Details"}
                             </Button>
                           </Stack>
                           {expanded && (
-                            <Stack spacing={0.75}>
+                            <Stack spacing={1.25}>
                               <Typography variant="caption" color="text.secondary">
-                                Duration {Math.floor((match.durationSeconds || 0) / 60).toString().padStart(2, "0")}:{Math.floor((match.durationSeconds || 0) % 60).toString().padStart(2, "0")}
+                                Duration {formatDuration(match.durationSeconds || 0)}
                               </Typography>
+                              <Box>
+                                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.75 }}>Players</Typography>
+                                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                                  {(match.players || []).map((player) => (
+                                    <Chip
+                                      key={player.user.id}
+                                      component={RouterLink}
+                                      to={`/users/${player.user.id}`}
+                                      clickable
+                                      label={`${decodeDisplayText(player.user.displayName)} · ${player.role}`}
+                                      color={player.team === "good" ? "info" : "error"}
+                                      variant="outlined"
+                                    />
+                                  ))}
+                                </Stack>
+                              </Box>
                               {(match.events || []).map((event) => (
                                 <Typography key={event.id} variant="caption" color="text.secondary" sx={{ display: "block", overflowWrap: "anywhere" }}>
-                                  {new Date(event.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {event.message}
+                                  {formatEventTime(event.createdAt, match.startedAt)} · {event.message}
                                 </Typography>
                               ))}
                             </Stack>
