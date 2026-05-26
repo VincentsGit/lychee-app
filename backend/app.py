@@ -586,6 +586,8 @@ def init_db():
             final_result TEXT DEFAULT NULL,
             mmr_before INTEGER DEFAULT 1000,
             mmr_after INTEGER DEFAULT 1000,
+            mmr_base_delta INTEGER DEFAULT 0,
+            mmr_role_bonus INTEGER DEFAULT 0,
             UNIQUE(game_id, user_id),
             FOREIGN KEY (game_id) REFERENCES avalon_games(id),
             FOREIGN KEY (user_id) REFERENCES users(id)
@@ -671,6 +673,12 @@ def init_db():
         )
         """
     )
+    for statement in [
+        ("mmr_base_delta", "ALTER TABLE avalon_game_players ADD COLUMN mmr_base_delta INTEGER DEFAULT 0"),
+        ("mmr_role_bonus", "ALTER TABLE avalon_game_players ADD COLUMN mmr_role_bonus INTEGER DEFAULT 0"),
+    ]:
+        if not column_exists(db, "avalon_game_players", statement[0]):
+            db.execute(statement[1])
     for statement in [
         ("media_type", "ALTER TABLE watchlist_items ADD COLUMN media_type TEXT NOT NULL DEFAULT 'movie'"),
         ("release_year", "ALTER TABLE watchlist_items ADD COLUMN release_year TEXT DEFAULT ''"),
@@ -2279,6 +2287,10 @@ def avalon_next_leader(game_id, current_leader_id=None):
     return players[next_index]["user_id"], next_index
 
 
+def avalon_role_mmr_multiplier(role):
+    return 1.2 if role in ("Merlin", "Assassin") else 1.0
+
+
 def avalon_finish_game(game_id, winner, assassin_user_id=None, assassin_target_user_id=None):
     db = get_db()
     game = db.execute("SELECT * FROM avalon_games WHERE id = ?", (game_id,)).fetchone()
@@ -2310,8 +2322,13 @@ def avalon_finish_game(game_id, winner, assassin_user_id=None, assassin_target_u
     for player in players:
         stats = stats_rows[player["user_id"]]
         old_mmr = stats["mmr"] or 1000
-        k_factor = 32 if (stats["games_played"] or 0) < 20 else 24
-        new_mmr = max(100, round(old_mmr + k_factor * (actual_by_team[player["team"]] - expected_by_team[player["team"]])))
+        k_factor = 32 if (stats["games_played"] or 0) < 5 else 24
+        raw_delta = k_factor * (actual_by_team[player["team"]] - expected_by_team[player["team"]])
+        base_delta = round(raw_delta)
+        role_multiplier = avalon_role_mmr_multiplier(player["role"])
+        adjusted_delta = round(raw_delta * role_multiplier)
+        role_bonus = abs(adjusted_delta - base_delta)
+        new_mmr = max(100, old_mmr + adjusted_delta)
         won = player["team"] == winner
         killed_merlin = player["user_id"] == assassin_user_id and assassin_target_user_id and winner == "evil"
         db.execute(
@@ -2343,8 +2360,12 @@ def avalon_finish_game(game_id, winner, assassin_user_id=None, assassin_target_u
             ),
         )
         db.execute(
-            "UPDATE avalon_game_players SET final_result = ?, mmr_before = ?, mmr_after = ? WHERE game_id = ? AND user_id = ?",
-            ("victory" if won else "defeat", old_mmr, new_mmr, game_id, player["user_id"]),
+            """
+            UPDATE avalon_game_players
+            SET final_result = ?, mmr_before = ?, mmr_after = ?, mmr_base_delta = ?, mmr_role_bonus = ?
+            WHERE game_id = ? AND user_id = ?
+            """,
+            ("victory" if won else "defeat", old_mmr, new_mmr, base_delta, role_bonus, game_id, player["user_id"]),
         )
 
     now = datetime.now()
@@ -2405,6 +2426,8 @@ def avalon_game_payload(game_id, viewer_id=None):
             "finalResult": player["final_result"],
             "mmrBefore": player["mmr_before"],
             "mmrAfter": player["mmr_after"],
+            "mmrBaseDelta": player["mmr_base_delta"],
+            "mmrRoleBonus": player["mmr_role_bonus"],
         }
         player_payloads.append(player_payload)
 
@@ -2498,6 +2521,7 @@ def avalon_history_for_user(user_id, limit=None):
     games = db.execute(
         f"""
         SELECT gp.role, gp.team, gp.final_result, gp.mmr_before, gp.mmr_after,
+               gp.mmr_base_delta, gp.mmr_role_bonus,
                g.id, g.winner, g.started_at, g.finished_at, g.status
         FROM avalon_game_players gp
         JOIN avalon_games g ON g.id = gp.game_id
@@ -2528,6 +2552,8 @@ def avalon_history_for_user(user_id, limit=None):
             "durationSeconds": max(duration, 0),
             "mmrBefore": game["mmr_before"],
             "mmrAfter": game["mmr_after"],
+            "mmrBaseDelta": game["mmr_base_delta"],
+            "mmrRoleBonus": game["mmr_role_bonus"],
             "events": [
                 {"id": event["id"], "createdAt": event["created_at"], "type": event["event_type"], "message": event["message"]}
                 for event in events
@@ -2540,6 +2566,8 @@ def avalon_history_for_user(user_id, limit=None):
                     "result": player["final_result"],
                     "mmrBefore": player["mmr_before"],
                     "mmrAfter": player["mmr_after"],
+                    "mmrBaseDelta": player["mmr_base_delta"],
+                    "mmrRoleBonus": player["mmr_role_bonus"],
                 }
                 for player in players
             ],

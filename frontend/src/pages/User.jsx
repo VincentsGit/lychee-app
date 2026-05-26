@@ -140,6 +140,7 @@ export default function User() {
                               />
                               <Chip label={match.role} variant="outlined" />
                               <Chip label={`${match.mmrAfter - match.mmrBefore >= 0 ? "+" : ""}${match.mmrAfter - match.mmrBefore} MMR`} variant="outlined" />
+                              {(match.mmrRoleBonus || 0) > 0 && <Chip label={`+${match.mmrRoleBonus} MMR role bonus`} color="secondary" variant="outlined" />}
                             </Stack>
                             <Button size="small" variant="text" onClick={() => setExpandedMatchId({ page: matchPage, gameId: expanded ? null : match.gameId })}>
                               {expanded ? "Hide" : "Details"}
