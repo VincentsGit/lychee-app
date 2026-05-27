@@ -2326,7 +2326,13 @@ def avalon_finish_game(game_id, winner, assassin_user_id=None, assassin_target_u
     for player in players:
         stats = stats_rows[player["user_id"]]
         old_mmr = stats["mmr"] or 1000
-        k_factor = 32 if (stats["games_played"] or 0) < 5 else 24
+        games_played = stats["games_played"] or 0
+        if games_played < 10:
+            k_factor = 32
+        elif games_played < 30:
+            k_factor = 24
+        else:
+            k_factor = 16
         raw_delta = k_factor * (actual_by_team[player["team"]] - expected_by_team[player["team"]])
         base_delta = round(raw_delta)
         role_multiplier = avalon_role_mmr_multiplier(player["role"])
@@ -3107,7 +3113,7 @@ def avalon_leaderboard():
                avalon_user_stats.mmr
         FROM avalon_user_stats
         JOIN users ON users.id = avalon_user_stats.user_id
-        WHERE avalon_user_stats.games_played > 0
+        WHERE avalon_user_stats.games_played >= 5
         ORDER BY avalon_user_stats.mmr DESC, avalon_user_stats.games_won DESC, users.username ASC
         LIMIT 100
         """

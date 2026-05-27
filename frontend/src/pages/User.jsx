@@ -74,6 +74,9 @@ export default function User() {
                 <Typography color="text.secondary">
                   {avalonStats.gamesPlayed || 0} games · {avalonStats.winRate || 0}% win rate
                 </Typography>
+                {(avalonStats.gamesPlayed || 0) > 0 && (avalonStats.gamesPlayed || 0) < 10 && (
+                  <Chip label="Provisional rating" color="warning" variant="outlined" sx={{ mt: 1 }} />
+                )}
               </Box>
               <Typography variant="h1" color="secondary.main" sx={{ lineHeight: 1 }}>
                 {avalonStats.mmr || 1000}

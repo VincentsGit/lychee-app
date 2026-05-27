@@ -576,7 +576,7 @@ function AvalonLeaderboard() {
       <Stack spacing={2}>
         <Box>
           <Typography variant="h2" color="blog.subheading">Leaderboard</Typography>
-          <Typography color="text.secondary">Highest ranking Avalon players with at least one finished game.</Typography>
+          <Typography color="text.secondary">Highest ranking Avalon players with at least 5 finished games.</Typography>
         </Box>
         <Stack spacing={1.25}>
           {players.length ? players.map((entry, index) => (
@@ -605,7 +605,7 @@ function AvalonLeaderboard() {
               </Stack>
             </Paper>
           )) : (
-            <Typography color="text.secondary">No ranked Avalon players yet.</Typography>
+            <Typography color="text.secondary">No ranked Avalon players yet. Players appear here after 5 games.</Typography>
           )}
         </Stack>
       </Stack>
