@@ -2288,7 +2288,11 @@ def avalon_next_leader(game_id, current_leader_id=None):
 
 
 def avalon_role_mmr_multiplier(role):
-    return 1.2 if role in ("Merlin", "Assassin") else 1.0
+    if role == "Merlin":
+        return 1.2
+    if role == "Assassin":
+        return 1.15
+    return 1.0
 
 
 def avalon_finish_game(game_id, winner, assassin_user_id=None, assassin_target_user_id=None):
