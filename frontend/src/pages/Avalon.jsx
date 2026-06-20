@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import CasinoIcon from "@mui/icons-material/Casino";
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import GroupsIcon from "@mui/icons-material/Groups";
 import LockIcon from "@mui/icons-material/Lock";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -69,6 +70,230 @@ function QuestBoard({ game }) {
         );
       })}
     </Box>
+  );
+}
+
+function arrayMove(items, fromIndex, toIndex) {
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function formatNameList(names = []) {
+  if (!names.length) return "None";
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function TimelineEventDetails({ event }) {
+  const payload = event.payload || {};
+  const detailSx = { display: "block", color: "text.secondary", overflowWrap: "anywhere" };
+  if (event.type === "vote_result") {
+    return (
+      <Stack spacing={0.25} sx={{ mt: 0.5 }}>
+        <Typography variant="caption" sx={detailSx}>
+          Approved: {formatNameList(payload.approvers || [])}
+        </Typography>
+        <Typography variant="caption" sx={detailSx}>
+          Rejected: {formatNameList(payload.rejectors || [])}
+        </Typography>
+      </Stack>
+    );
+  }
+  if (event.type === "quest_result") {
+    return (
+      <Typography variant="caption" sx={detailSx}>
+        Cards played: {payload.successCount ?? 0} success, {payload.failCount ?? 0} fail
+        {payload.failThreshold > 1 ? ` · needs ${payload.failThreshold} fails to fail` : ""}
+      </Typography>
+    );
+  }
+  if (event.type === "team_selected") {
+    return (
+      <Typography variant="caption" sx={detailSx}>
+        Team: {formatNameList(payload.selectedNames || [])}
+      </Typography>
+    );
+  }
+  if (event.type === "leader_selected") {
+    return (
+      <Typography variant="caption" sx={detailSx}>
+        Leader: {payload.leaderName || "Randomly chosen"}
+      </Typography>
+    );
+  }
+  if (event.type === "game_started") {
+    return (
+      <Typography variant="caption" sx={detailSx}>
+        {Array.isArray(payload.players) ? `${payload.players.length} players joined the game.` : ""}
+      </Typography>
+    );
+  }
+  return null;
+}
+
+function LobbyRoster({ lobby, isHost, onReorder, onKick }) {
+  const [orderedPlayers, setOrderedPlayers] = useState(lobby.players || []);
+  const [draggingId, setDraggingId] = useState(null);
+  const itemRefs = useRef(new Map());
+  const previousRectsRef = useRef(new Map());
+  const orderedPlayersRef = useRef(orderedPlayers);
+  const dragStateRef = useRef({ id: null, moved: false });
+
+  useEffect(() => {
+    if (!draggingId) {
+      setOrderedPlayers(lobby.players || []);
+    }
+  }, [draggingId, lobby.players]);
+
+  useEffect(() => {
+    orderedPlayersRef.current = orderedPlayers;
+  }, [orderedPlayers]);
+
+  useLayoutEffect(() => {
+    const nextRects = new Map();
+    orderedPlayers.forEach((player) => {
+      const el = itemRefs.current.get(player.id);
+      if (!el) return;
+      const nextRect = el.getBoundingClientRect();
+      nextRects.set(player.id, nextRect);
+      const previousRect = previousRectsRef.current.get(player.id);
+      if (!previousRect) return;
+      const deltaX = previousRect.left - nextRect.left;
+      const deltaY = previousRect.top - nextRect.top;
+      if (!deltaX && !deltaY) return;
+      el.style.transition = "transform 0s";
+      el.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+      window.requestAnimationFrame(() => {
+        el.style.transition = "transform 220ms ease";
+        el.style.transform = "";
+      });
+    });
+    previousRectsRef.current = nextRects;
+  }, [orderedPlayers]);
+
+  useEffect(() => {
+    if (!draggingId) return undefined;
+
+    const moveDraggedPlayer = (targetId) => {
+      setOrderedPlayers((current) => {
+        const fromIndex = current.findIndex((player) => player.id === dragStateRef.current.id);
+        const toIndex = current.findIndex((player) => player.id === targetId);
+        if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return current;
+        dragStateRef.current.moved = true;
+        return arrayMove(current, fromIndex, toIndex);
+      });
+    };
+
+    const onPointerMove = (event) => {
+      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-player-id]");
+      if (!target) return;
+      const targetId = Number(target.getAttribute("data-player-id"));
+      if (!Number.isFinite(targetId) || targetId === dragStateRef.current.id) return;
+      moveDraggedPlayer(targetId);
+    };
+
+    const endDrag = async () => {
+      const currentId = dragStateRef.current.id;
+      const currentOrder = orderedPlayersRef.current.map((player) => player.id);
+      const moved = dragStateRef.current.moved;
+      dragStateRef.current = { id: null, moved: false };
+      setDraggingId(null);
+      if (moved && currentId) {
+        try {
+          await onReorder(currentOrder);
+        } catch {
+          setOrderedPlayers(lobby.players || []);
+        }
+      }
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", endDrag);
+    window.addEventListener("pointercancel", endDrag);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
+    };
+  }, [draggingId, onReorder]);
+
+  const startDrag = (playerId) => (event) => {
+    if (!isHost) return;
+    if (event.button !== undefined && event.button !== 0) return;
+    dragStateRef.current = { id: playerId, moved: false };
+    setDraggingId(playerId);
+    event.preventDefault();
+  };
+
+  return (
+    <Stack spacing={1.25} sx={{ width: "100%" }}>
+      {orderedPlayers.map((player) => {
+        const selected = draggingId === player.id;
+        return (
+          <Paper
+            key={player.id}
+            ref={(node) => {
+              if (node) itemRefs.current.set(player.id, node);
+              else itemRefs.current.delete(player.id);
+            }}
+            data-player-id={player.id}
+            variant="outlined"
+            sx={{
+              p: 1.5,
+              boxShadow: "none",
+              transition: "box-shadow 180ms ease, opacity 180ms ease, transform 180ms ease",
+              opacity: selected ? 0.92 : 1,
+              borderColor: selected ? "secondary.main" : "divider",
+              bgcolor: "background.paper",
+              touchAction: "manipulation",
+            }}
+          >
+            <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
+              {isHost ? (
+                <Box
+                  onPointerDown={startDrag(player.id)}
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: 40,
+                    height: 40,
+                    flex: "0 0 auto",
+                    borderRadius: 1.5,
+                    cursor: "grab",
+                    touchAction: "none",
+                    color: "secondary.main",
+                    bgcolor: "rgba(173, 116, 245, 0.14)",
+                  }}
+                >
+                  <DragIndicatorIcon />
+                </Box>
+              ) : (
+                <Box sx={{ width: 40, height: 40, flex: "0 0 auto" }} />
+              )}
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center">
+                  <Typography variant="h3" color="blog.subheading" sx={{ overflowWrap: "anywhere" }}>
+                    {userName(player)}
+                  </Typography>
+                  {player.id === lobby.hostUserId && <Chip size="small" label="Host" color="secondary" />}
+                  <Chip size="small" label={player.ready ? "Ready" : "Not ready"} color={player.ready ? "info" : "default"} variant="outlined" />
+                  <Chip size="small" label={`${player.mmr || 1000} Elo`} variant="outlined" />
+                </Stack>
+              </Box>
+              {isHost && player.id !== lobby.hostUserId && (
+                <Button size="small" color="error" variant="outlined" onClick={() => onKick(player.id)}>
+                  Kick
+                </Button>
+              )}
+            </Stack>
+          </Paper>
+        );
+      })}
+    </Stack>
   );
 }
 
@@ -255,9 +480,12 @@ function OnlineGame({ game, setGame, refreshGame, setError, returnToLobby }) {
         <Stack spacing={1.5}>
           <Typography variant="h2" color="blog.subheading">Timeline</Typography>
           {(game.events || []).map((event) => (
-            <Typography key={event.id} color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
-              {formatEventTime(event.createdAt, game.startedAt)} · {event.message}
-            </Typography>
+            <Box key={event.id}>
+              <Typography color="text.secondary" sx={{ overflowWrap: "anywhere" }}>
+                {formatEventTime(event.createdAt, game.startedAt)} · {event.message}
+              </Typography>
+              <TimelineEventDetails event={event} />
+            </Box>
           ))}
         </Stack>
       </Paper>
@@ -399,6 +627,22 @@ function OnlineAvalon({ user }) {
     }
   };
 
+  const saveLobbyOrder = async (playerIds) => {
+    setError("");
+    try {
+      const data = await api(avalonApi(`/avalon/lobbies/${lobby.id}/order`), {
+        method: "POST",
+        body: JSON.stringify({ playerIds }),
+      });
+      if (!data?.lobby) throw new Error("The lobby response was empty. Please try again.");
+      setLobby(data.lobby);
+      await refreshLobbies();
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    }
+  };
+
   const resumeAvalon = () => {
     if (resumeSession?.game) {
       setGame(resumeSession.game);
@@ -472,27 +716,12 @@ function OnlineAvalon({ user }) {
               </Stack>
             </Stack>
 
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(2, minmax(0, 1fr))" }, gap: 1.5 }}>
-              {lobby.players.map((player) => (
-                <Paper key={player.id} variant="outlined" sx={{ p: 1.5, boxShadow: "none" }}>
-                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} justifyContent="space-between" alignItems={{ sm: "center" }}>
-                    <Box>
-                      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                        <Typography variant="h3" color="blog.subheading" sx={{ overflowWrap: "anywhere" }}>{userName(player)}</Typography>
-                        {player.id === lobby.hostUserId && <Chip size="small" label="Host" color="secondary" />}
-                        <Chip size="small" label={player.ready ? "Ready" : "Not ready"} color={player.ready ? "info" : "default"} variant="outlined" />
-                      </Stack>
-                      <Typography color="text.secondary">{player.mmr || 1000} Elo</Typography>
-                    </Box>
-                    {isHost && player.id !== user?.id && (
-                      <Button size="small" color="error" variant="outlined" onClick={() => kickPlayer(player.id)}>
-                        Kick
-                      </Button>
-                    )}
-                  </Stack>
-                </Paper>
-              ))}
-            </Box>
+            {isHost && (
+              <Alert severity="info">
+                Drag the handle to reorder the lobby. The first leader is still random, then leadership follows this order.
+              </Alert>
+            )}
+            <LobbyRoster lobby={lobby} isHost={isHost} onReorder={saveLobbyOrder} onKick={kickPlayer} />
 
             <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
               {joinedLobby && (

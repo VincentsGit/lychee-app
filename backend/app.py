@@ -545,6 +545,7 @@ def init_db():
             lobby_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
             ready INTEGER DEFAULT 0,
+            sort_order INTEGER DEFAULT 0,
             joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(lobby_id, user_id),
             FOREIGN KEY (lobby_id) REFERENCES avalon_lobbies(id),
@@ -679,6 +680,8 @@ def init_db():
     ]:
         if not column_exists(db, "avalon_game_players", statement[0]):
             db.execute(statement[1])
+    if not column_exists(db, "avalon_lobby_players", "sort_order"):
+        db.execute("ALTER TABLE avalon_lobby_players ADD COLUMN sort_order INTEGER DEFAULT 0")
     for statement in [
         ("media_type", "ALTER TABLE watchlist_items ADD COLUMN media_type TEXT NOT NULL DEFAULT 'movie'"),
         ("release_year", "ALTER TABLE watchlist_items ADD COLUMN release_year TEXT DEFAULT ''"),
@@ -721,10 +724,25 @@ def init_db():
         "CREATE INDEX IF NOT EXISTS idx_cookies_created ON cookies(created_at)",
         "CREATE INDEX IF NOT EXISTS idx_avalon_lobbies_status_created ON avalon_lobbies(status, created_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_avalon_lobby_players_lobby ON avalon_lobby_players(lobby_id)",
+        "CREATE INDEX IF NOT EXISTS idx_avalon_lobby_players_order ON avalon_lobby_players(lobby_id, sort_order ASC, id ASC)",
         "CREATE INDEX IF NOT EXISTS idx_avalon_game_players_user ON avalon_game_players(user_id, game_id)",
         "CREATE INDEX IF NOT EXISTS idx_avalon_events_game_created ON avalon_events(game_id, created_at ASC)",
     ]:
         db.execute(statement)
+    db.execute(
+        """
+        UPDATE avalon_lobby_players
+        SET sort_order = (
+            SELECT COUNT(*)
+            FROM avalon_lobby_players AS earlier
+            WHERE earlier.lobby_id = avalon_lobby_players.lobby_id
+              AND (
+                earlier.joined_at < avalon_lobby_players.joined_at
+                OR (earlier.joined_at = avalon_lobby_players.joined_at AND earlier.id < avalon_lobby_players.id)
+              )
+        )
+        """
+    )
     migrate_travel_posts(db)
     seed_default_concerts(db)
     db.execute(
@@ -2168,11 +2186,11 @@ def avalon_stats_for_user(user_id):
 def avalon_lobby_players(lobby_id):
     rows = get_db().execute(
         """
-        SELECT lp.ready, lp.joined_at, users.id, users.username, users.display_name, users.about_me, users.avatar_url, users.created_at
+        SELECT lp.ready, lp.sort_order, lp.joined_at, users.id, users.username, users.display_name, users.about_me, users.avatar_url, users.created_at
         FROM avalon_lobby_players lp
         JOIN users ON users.id = lp.user_id
         WHERE lp.lobby_id = ?
-        ORDER BY lp.joined_at ASC, lp.id ASC
+        ORDER BY lp.sort_order ASC, lp.joined_at ASC, lp.id ASC
         """,
         (lobby_id,),
     ).fetchall()
@@ -2181,6 +2199,7 @@ def avalon_lobby_players(lobby_id):
             **row_to_user(row),
             "ready": bool(row["ready"]),
             "joinedAt": row["joined_at"],
+            "sortOrder": row["sort_order"] if "sort_order" in row.keys() else 0,
             "mmr": avalon_stats_for_user(row["id"])["mmr"],
         }
         for row in rows
@@ -2203,13 +2222,38 @@ def avalon_cleanup_empty_lobbies():
 
 def avalon_remove_lobby_player(db, lobby, user_id):
     db.execute("DELETE FROM avalon_lobby_players WHERE lobby_id = ? AND user_id = ?", (lobby["id"], user_id))
-    remaining = db.execute("SELECT user_id FROM avalon_lobby_players WHERE lobby_id = ? ORDER BY RANDOM() LIMIT 1", (lobby["id"],)).fetchone()
+    remaining = db.execute(
+        """
+        SELECT user_id
+        FROM avalon_lobby_players
+        WHERE lobby_id = ?
+        ORDER BY sort_order ASC, joined_at ASC, id ASC
+        LIMIT 1
+        """,
+        (lobby["id"],),
+    ).fetchone()
     if not remaining:
         db.execute("UPDATE avalon_lobbies SET status = 'closed' WHERE id = ?", (lobby["id"],))
         return None
     if lobby["host_user_id"] == user_id:
         db.execute("UPDATE avalon_lobbies SET host_user_id = ? WHERE id = ?", (remaining["user_id"], lobby["id"]))
     return db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby["id"],)).fetchone()
+
+
+def avalon_reorder_lobby_players(db, lobby_id, ordered_player_ids):
+    current_players = db.execute(
+        "SELECT user_id FROM avalon_lobby_players WHERE lobby_id = ? ORDER BY sort_order ASC, joined_at ASC, id ASC",
+        (lobby_id,),
+    ).fetchall()
+    current_ids = [row["user_id"] for row in current_players]
+    if sorted(current_ids) != sorted(ordered_player_ids):
+        return False, "Submitted order does not match the current lobby players"
+    for sort_order, user_id in enumerate(ordered_player_ids):
+        db.execute(
+            "UPDATE avalon_lobby_players SET sort_order = ? WHERE lobby_id = ? AND user_id = ?",
+            (sort_order, lobby_id, user_id),
+        )
+    return True, None
 
 
 def avalon_lobby_payload(lobby):
@@ -2669,7 +2713,7 @@ def avalon_create_lobby():
     )
     lobby_id = cursor.lastrowid
     db.execute(
-        "INSERT INTO avalon_lobby_players (lobby_id, user_id, ready) VALUES (?, ?, 1)",
+        "INSERT INTO avalon_lobby_players (lobby_id, user_id, ready, sort_order) VALUES (?, ?, 1, 0)",
         (lobby_id, user["id"]),
     )
     db.commit()
@@ -2720,7 +2764,14 @@ def avalon_join_lobby(lobby_id):
     count = db.execute("SELECT COUNT(*) AS count FROM avalon_lobby_players WHERE lobby_id = ?", (lobby_id,)).fetchone()["count"]
     if count >= lobby["max_players"]:
         return {"error": "Lobby is full"}, 400
-    db.execute("INSERT OR IGNORE INTO avalon_lobby_players (lobby_id, user_id, ready) VALUES (?, ?, 0)", (lobby_id, user["id"]))
+    next_order = db.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM avalon_lobby_players WHERE lobby_id = ?",
+        (lobby_id,),
+    ).fetchone()["next_order"]
+    db.execute(
+        "INSERT OR IGNORE INTO avalon_lobby_players (lobby_id, user_id, ready, sort_order) VALUES (?, ?, 0, ?)",
+        (lobby_id, user["id"], next_order),
+    )
     db.commit()
     lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
     return jsonify({"lobby": avalon_lobby_payload(lobby)})
@@ -2743,6 +2794,35 @@ def avalon_set_ready(lobby_id):
     )
     if result.rowcount == 0:
         return {"error": "You are not in this lobby"}, 404
+    db.commit()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    return jsonify({"lobby": avalon_lobby_payload(lobby)})
+
+
+@app.route("/avalon/lobbies/<int:lobby_id>/order", methods=["POST"])
+def avalon_reorder_lobby(lobby_id):
+    user, error = require_user()
+    if error:
+        return error
+    data = request.get_json() or {}
+    ordered_player_ids = data.get("playerIds")
+    if not isinstance(ordered_player_ids, list):
+        return {"error": "Player order is required"}, 400
+    try:
+        ordered_player_ids = [int(player_id) for player_id in ordered_player_ids]
+    except (TypeError, ValueError):
+        return {"error": "Player ids must be numeric"}, 400
+    db = get_db()
+    lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
+    if not lobby:
+        return {"error": "Lobby not found"}, 404
+    if lobby["status"] != "waiting":
+        return {"error": "Game has already started"}, 400
+    if lobby["host_user_id"] != user["id"]:
+        return {"error": "Only the host can reorder players"}, 403
+    success, message = avalon_reorder_lobby_players(db, lobby_id, ordered_player_ids)
+    if not success:
+        return {"error": message}, 400
     db.commit()
     lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
     return jsonify({"lobby": avalon_lobby_payload(lobby)})
@@ -2803,11 +2883,11 @@ def avalon_start_lobby(lobby_id):
         return {"error": "Lobby has already started"}, 400
     lobby_players = db.execute(
         """
-        SELECT lp.ready, users.id, users.username, users.display_name
+        SELECT lp.ready, lp.sort_order, users.id, users.username, users.display_name
         FROM avalon_lobby_players lp
         JOIN users ON users.id = lp.user_id
         WHERE lp.lobby_id = ?
-        ORDER BY lp.joined_at ASC, lp.id ASC
+        ORDER BY lp.sort_order ASC, lp.joined_at ASC, lp.id ASC
         """,
         (lobby_id,),
     ).fetchall()
@@ -2819,10 +2899,9 @@ def avalon_start_lobby(lobby_id):
     now = datetime.now()
     expires_at = now + timedelta(days=1)
     roles = avalon_build_roles(len(lobby_players))
-    turn_order = list(range(len(lobby_players)))
-    random.shuffle(turn_order)
-    ordered_players = [lobby_players[index] for index in turn_order]
-    leader = random.choice(ordered_players)
+    ordered_players = list(lobby_players)
+    leader_index = random.randrange(len(ordered_players))
+    leader = ordered_players[leader_index]
     cursor = db.execute(
         """
         INSERT INTO avalon_games
@@ -2843,11 +2922,20 @@ def avalon_start_lobby(lobby_id):
             (game_id, player["id"], role["role"], role["team"], order_index, avalon_stats_for_user(player["id"])["mmr"], avalon_stats_for_user(player["id"])["mmr"]),
         )
     db.execute(
+        "UPDATE avalon_games SET turn_index = ? WHERE id = ?",
+        (leader_index, game_id),
+    )
+    db.execute(
         "UPDATE avalon_lobbies SET status = 'in_progress', game_id = ?, started_at = ?, expires_at = ? WHERE id = ?",
         (game_id, now, expires_at, lobby_id),
     )
     avalon_event(game_id, "game_started", "Game started", {"players": [player["id"] for player in ordered_players]})
-    avalon_event(game_id, "leader_selected", f"{leader['display_name'] or leader['username']} is the first leader", {"leaderUserId": leader["id"]})
+    avalon_event(
+        game_id,
+        "leader_selected",
+        f"{leader['display_name'] or leader['username']} is the first leader",
+        {"leaderUserId": leader["id"], "leaderName": leader["display_name"] or leader["username"], "turnIndex": leader_index},
+    )
     db.commit()
     return jsonify({"game": avalon_game_payload(game_id, user["id"])})
 
@@ -2935,7 +3023,12 @@ def avalon_choose_team(game_id):
         (avalon_user_brief(player_id) or {}).get("displayName") or (avalon_user_brief(player_id) or {}).get("username") or str(player_id)
         for player_id in selected_team
     ]
-    avalon_event(game_id, "team_selected", f"{user['display_name'] or user['username']} picked {', '.join(names)}", {"selectedTeam": selected_team})
+    avalon_event(
+        game_id,
+        "team_selected",
+        f"{user['display_name'] or user['username']} picked {', '.join(names)}",
+        {"selectedTeam": selected_team, "selectedNames": names, "leaderUserId": user["id"]},
+    )
     db.commit()
     return jsonify({"game": avalon_game_payload(game_id, user["id"])})
 
@@ -2961,10 +3054,31 @@ def avalon_vote_team(game_id):
     )
     vote_count = db.execute("SELECT COUNT(*) AS count FROM avalon_votes WHERE quest_id = ?", (quest["id"],)).fetchone()["count"]
     if vote_count == game["player_count"]:
-        votes = db.execute("SELECT vote FROM avalon_votes WHERE quest_id = ?", (quest["id"],)).fetchall()
-        approve_count = sum(1 for item in votes if item["vote"] == "approve")
-        reject_count = len(votes) - approve_count
-        avalon_event(game_id, "vote_result", f"Team vote: {approve_count} approve, {reject_count} reject", {"approve": approve_count, "reject": reject_count})
+        votes = db.execute(
+            """
+            SELECT avalon_votes.vote, users.username, users.display_name
+            FROM avalon_votes
+            JOIN users ON users.id = avalon_votes.user_id
+            WHERE avalon_votes.quest_id = ?
+            ORDER BY avalon_votes.created_at ASC, avalon_votes.id ASC
+            """,
+            (quest["id"],),
+        ).fetchall()
+        approve_players = [vote["display_name"] or vote["username"] for vote in votes if vote["vote"] == "approve"]
+        reject_players = [vote["display_name"] or vote["username"] for vote in votes if vote["vote"] == "reject"]
+        approve_count = len(approve_players)
+        reject_count = len(reject_players)
+        avalon_event(
+            game_id,
+            "vote_result",
+            f"Team vote: {approve_count} approve, {reject_count} reject",
+            {
+                "approve": approve_count,
+                "reject": reject_count,
+                "approvers": approve_players,
+                "rejectors": reject_players,
+            },
+        )
         if approve_count > reject_count:
             db.execute("UPDATE avalon_quests SET status = 'quest_cards' WHERE id = ?", (quest["id"],))
             db.execute("UPDATE avalon_games SET current_phase = 'quest_cards', rejected_votes = 0 WHERE id = ?", (game_id,))
@@ -3022,6 +3136,7 @@ def avalon_submit_quest_card(game_id):
     if card_count == quest["team_size"]:
         cards = db.execute("SELECT card FROM avalon_quest_cards WHERE quest_id = ?", (quest["id"],)).fetchall()
         fail_count = sum(1 for item in cards if item["card"] == "fail")
+        success_count = len(cards) - fail_count
         result = "fail" if fail_count >= quest["fail_threshold"] else "success"
         db.execute(
             """
@@ -3031,7 +3146,18 @@ def avalon_submit_quest_card(game_id):
             """,
             (result, fail_count, datetime.now(), quest["id"]),
         )
-        avalon_event(game_id, "quest_result", f"Quest {quest['quest_index'] + 1} {'failed' if result == 'fail' else 'passed'}", {"failCount": fail_count, "result": result})
+        avalon_event(
+            game_id,
+            "quest_result",
+            f"Quest {quest['quest_index'] + 1} {'failed' if result == 'fail' else 'passed'}",
+            {
+                "failCount": fail_count,
+                "successCount": success_count,
+                "failThreshold": quest["fail_threshold"],
+                "result": result,
+                "questIndex": quest["quest_index"],
+            },
+        )
         totals = db.execute(
             """
             SELECT
