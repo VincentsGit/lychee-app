@@ -141,6 +141,8 @@ function LobbyRoster({ lobby, isHost, onReorder, onKick }) {
   const previousRectsRef = useRef(new Map());
   const orderedPlayersRef = useRef(orderedPlayers);
   const dragStateRef = useRef({ id: null, moved: false });
+  const ignoreDragTarget = (target) =>
+    Boolean(target?.closest?.("button,a,input,textarea,[role='button'],[data-no-drag='true']"));
 
   useEffect(() => {
     if (!draggingId) {
@@ -225,6 +227,13 @@ function LobbyRoster({ lobby, isHost, onReorder, onKick }) {
     if (event.button !== undefined && event.button !== 0) return;
     dragStateRef.current = { id: playerId, moved: false };
     setDraggingId(playerId);
+    if (event.currentTarget?.setPointerCapture) {
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {
+        // Ignore capture failures on browsers that do not support it for this target.
+      }
+    }
     event.preventDefault();
   };
 
@@ -248,7 +257,13 @@ function LobbyRoster({ lobby, isHost, onReorder, onKick }) {
               opacity: selected ? 0.92 : 1,
               borderColor: selected ? "secondary.main" : "divider",
               bgcolor: "background.paper",
-              touchAction: "manipulation",
+              touchAction: "none",
+              userSelect: "none",
+              cursor: isHost ? "grab" : "default",
+            }}
+            onPointerDown={(event) => {
+              if (!isHost || ignoreDragTarget(event.target)) return;
+              startDrag(player.id)(event);
             }}
           >
             <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
@@ -259,8 +274,8 @@ function LobbyRoster({ lobby, isHost, onReorder, onKick }) {
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    width: 40,
-                    height: 40,
+                    width: { xs: 52, sm: 40 },
+                    height: { xs: 52, sm: 40 },
                     flex: "0 0 auto",
                     borderRadius: 1.5,
                     cursor: "grab",
