@@ -784,6 +784,13 @@ def init_db():
         WHERE display_name IS NULL OR display_name = ''
         """
     )
+    db.execute(
+        """
+        UPDATE avalon_lobbies
+        SET expires_at = COALESCE(expires_at, datetime(created_at, '+1 hour'))
+        WHERE status = 'waiting'
+        """
+    )
     db.execute("UPDATE users SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP)")
     db.commit()
 
@@ -2220,6 +2227,26 @@ def avalon_cleanup_empty_lobbies():
     )
 
 
+def avalon_touch_lobby(db, lobby_id, minutes=60):
+    db.execute(
+        "UPDATE avalon_lobbies SET expires_at = ? WHERE id = ? AND status = 'waiting'",
+        (datetime.now() + timedelta(minutes=minutes), lobby_id),
+    )
+
+
+def avalon_cleanup_expired_lobbies():
+    db = get_db()
+    db.execute(
+        """
+        UPDATE avalon_lobbies
+        SET status = 'expired'
+        WHERE status = 'waiting'
+          AND expires_at IS NOT NULL
+          AND expires_at <= CURRENT_TIMESTAMP
+        """
+    )
+
+
 def avalon_remove_lobby_player(db, lobby, user_id):
     db.execute("DELETE FROM avalon_lobby_players WHERE lobby_id = ? AND user_id = ?", (lobby["id"], user_id))
     remaining = db.execute(
@@ -2430,10 +2457,10 @@ def avalon_finish_game(game_id, winner, assassin_user_id=None, assassin_target_u
     db.execute(
         """
         UPDATE avalon_lobbies
-        SET status = 'waiting', game_id = NULL, started_at = NULL, finished_at = ?, expires_at = NULL
+        SET status = 'waiting', game_id = NULL, started_at = NULL, finished_at = ?, expires_at = ?
         WHERE id = ?
         """,
-        (now, game["lobby_id"]),
+        (now, now + timedelta(hours=1), game["lobby_id"]),
     )
     db.execute("UPDATE avalon_lobby_players SET ready = 0 WHERE lobby_id = ?", (game["lobby_id"],))
     avalon_event(game_id, "game_finished", f"{winner.title()} wins", {"winner": winner})
@@ -2633,6 +2660,7 @@ def avalon_history_for_user(user_id, limit=None):
 def avalon_list_lobbies():
     db = get_db()
     avalon_cleanup_empty_lobbies()
+    avalon_cleanup_expired_lobbies()
     db.commit()
     lobbies = db.execute(
         """
@@ -2652,6 +2680,7 @@ def avalon_current_session():
         return error
     db = get_db()
     avalon_cleanup_empty_lobbies()
+    avalon_cleanup_expired_lobbies()
     db.commit()
     game = db.execute(
         """
@@ -2694,6 +2723,7 @@ def avalon_create_lobby():
     max_players = max(5, min(int(data.get("maxPlayers") or 10), 10))
     db = get_db()
     avalon_cleanup_empty_lobbies()
+    avalon_cleanup_expired_lobbies()
     existing = db.execute(
         """
         SELECT l.id
@@ -2708,8 +2738,8 @@ def avalon_create_lobby():
         db.commit()
         return {"error": "Leave your current lobby before creating another one"}, 400
     cursor = db.execute(
-        "INSERT INTO avalon_lobbies (name, host_user_id, password_hash, max_players) VALUES (?, ?, ?, ?)",
-        (name, user["id"], generate_password_hash(password) if password else "", max_players),
+        "INSERT INTO avalon_lobbies (name, host_user_id, password_hash, max_players, expires_at) VALUES (?, ?, ?, ?, ?)",
+        (name, user["id"], generate_password_hash(password) if password else "", max_players, datetime.now() + timedelta(hours=1)),
     )
     lobby_id = cursor.lastrowid
     db.execute(
@@ -2725,6 +2755,7 @@ def avalon_create_lobby():
 def avalon_get_lobby(lobby_id):
     db = get_db()
     avalon_cleanup_empty_lobbies()
+    avalon_cleanup_expired_lobbies()
     db.commit()
     lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
     if not lobby:
@@ -2741,6 +2772,7 @@ def avalon_join_lobby(lobby_id):
     password = (data.get("password") or "").strip()
     db = get_db()
     avalon_cleanup_empty_lobbies()
+    avalon_cleanup_expired_lobbies()
     existing = db.execute(
         """
         SELECT l.id
@@ -2772,6 +2804,7 @@ def avalon_join_lobby(lobby_id):
         "INSERT OR IGNORE INTO avalon_lobby_players (lobby_id, user_id, ready, sort_order) VALUES (?, ?, 0, ?)",
         (lobby_id, user["id"], next_order),
     )
+    avalon_touch_lobby(db, lobby_id)
     db.commit()
     lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
     return jsonify({"lobby": avalon_lobby_payload(lobby)})
@@ -2794,6 +2827,7 @@ def avalon_set_ready(lobby_id):
     )
     if result.rowcount == 0:
         return {"error": "You are not in this lobby"}, 404
+    avalon_touch_lobby(db, lobby_id)
     db.commit()
     lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
     return jsonify({"lobby": avalon_lobby_payload(lobby)})
@@ -2823,6 +2857,7 @@ def avalon_reorder_lobby(lobby_id):
     success, message = avalon_reorder_lobby_players(db, lobby_id, ordered_player_ids)
     if not success:
         return {"error": message}, 400
+    avalon_touch_lobby(db, lobby_id)
     db.commit()
     lobby = db.execute("SELECT * FROM avalon_lobbies WHERE id = ?", (lobby_id,)).fetchone()
     return jsonify({"lobby": avalon_lobby_payload(lobby)})
@@ -2842,6 +2877,8 @@ def avalon_leave_lobby(lobby_id):
     if not db.execute("SELECT id FROM avalon_lobby_players WHERE lobby_id = ? AND user_id = ?", (lobby_id, user["id"])).fetchone():
         return {"error": "You are not in this lobby"}, 404
     lobby = avalon_remove_lobby_player(db, lobby, user["id"])
+    if lobby:
+        avalon_touch_lobby(db, lobby_id)
     db.commit()
     return jsonify({"lobby": avalon_lobby_payload(lobby) if lobby else None})
 
@@ -2864,6 +2901,8 @@ def avalon_kick_lobby_player(lobby_id, player_id):
     if not db.execute("SELECT id FROM avalon_lobby_players WHERE lobby_id = ? AND user_id = ?", (lobby_id, player_id)).fetchone():
         return {"error": "That player is not in this lobby"}, 404
     lobby = avalon_remove_lobby_player(db, lobby, player_id)
+    if lobby:
+        avalon_touch_lobby(db, lobby_id)
     db.commit()
     return jsonify({"lobby": avalon_lobby_payload(lobby) if lobby else None})
 
