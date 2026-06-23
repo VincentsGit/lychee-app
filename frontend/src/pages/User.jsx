@@ -25,6 +25,60 @@ function formatEventTime(eventTime, startedAt) {
   return formatDuration(Math.floor(elapsedMs / 1000));
 }
 
+function formatNameList(names = []) {
+  if (!names.length) return "None";
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names[names.length - 1]}`;
+}
+
+function EventDetails({ event }) {
+  const payload = event.payload || {};
+  const detailSx = { display: "block", color: "text.secondary", overflowWrap: "anywhere" };
+  if (event.type === "vote_result") {
+    return (
+      <Stack spacing={0.25} sx={{ mt: 0.5 }}>
+        <Typography variant="caption" sx={detailSx}>
+          Approved: {formatNameList(payload.approvers || [])}
+        </Typography>
+        <Typography variant="caption" sx={detailSx}>
+          Rejected: {formatNameList(payload.rejectors || [])}
+        </Typography>
+      </Stack>
+    );
+  }
+  if (event.type === "quest_result") {
+    return (
+      <Typography variant="caption" sx={detailSx}>
+        Cards played: {payload.successCount ?? 0} success, {payload.failCount ?? 0} fail
+        {payload.failThreshold > 1 ? ` · needs ${payload.failThreshold} fails to fail` : ""}
+      </Typography>
+    );
+  }
+  if (event.type === "team_selected") {
+    return (
+      <Typography variant="caption" sx={detailSx}>
+        Team: {formatNameList(payload.selectedNames || [])}
+      </Typography>
+    );
+  }
+  if (event.type === "leader_selected") {
+    return (
+      <Typography variant="caption" sx={detailSx}>
+        Leader: {payload.leaderName || "Randomly chosen"}
+      </Typography>
+    );
+  }
+  if (event.type === "game_started") {
+    return (
+      <Typography variant="caption" sx={detailSx}>
+        {Array.isArray(payload.players) ? `${payload.players.length} players joined the game.` : ""}
+      </Typography>
+    );
+  }
+  return null;
+}
+
 export default function User() {
   const { userId } = useParams();
   const [profile, setProfile] = useState(null);
@@ -171,9 +225,12 @@ export default function User() {
                                 </Stack>
                               </Box>
                               {(match.events || []).map((event) => (
-                                <Typography key={event.id} variant="caption" color="text.secondary" sx={{ display: "block", overflowWrap: "anywhere" }}>
-                                  {formatEventTime(event.createdAt, match.startedAt)} · {event.message}
-                                </Typography>
+                                <Box key={event.id} sx={{ mt: 0.5 }}>
+                                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", overflowWrap: "anywhere" }}>
+                                    {formatEventTime(event.createdAt, match.startedAt)} · {event.message}
+                                  </Typography>
+                                  <EventDetails event={event} />
+                                </Box>
                               ))}
                             </Stack>
                           )}

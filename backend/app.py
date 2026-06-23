@@ -2636,7 +2636,13 @@ def avalon_history_for_user(user_id, limit=None):
             "mmrBaseDelta": game["mmr_base_delta"],
             "mmrRoleBonus": game["mmr_role_bonus"],
             "events": [
-                {"id": event["id"], "createdAt": event["created_at"], "type": event["event_type"], "message": event["message"]}
+                {
+                    "id": event["id"],
+                    "createdAt": event["created_at"],
+                    "type": event["event_type"],
+                    "message": event["message"],
+                    "payload": json.loads(event["payload_json"] or "{}"),
+                }
                 for event in events
             ],
             "players": [
