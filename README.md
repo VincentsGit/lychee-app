@@ -92,3 +92,24 @@ For non-interactive deletion:
 ```
 
 The delete script refuses to delete the owner account, creates a database backup first, deletes the user's comments and sessions, deletes the user row, and removes their uploaded avatar file if it belongs to the app uploads folder.
+
+## Certificate Renewal
+
+The site uses a Let's Encrypt certificate for `lychee.blog` and `www.lychee.blog`. When it needs renewing, use the manual DNS flow that has been reliable for this deployment:
+
+```bash
+sudo docker run -it --rm \
+  -v /etc/letsencrypt:/etc/letsencrypt \
+  -v /var/lib/letsencrypt:/var/lib/letsencrypt \
+  certbot/certbot certonly \
+  --manual \
+  --preferred-challenges=dns \
+  -d lychee.blog -d www.lychee.blog
+```
+
+After Certbot asks for the DNS TXT records, add them in the domain provider, wait for propagation, then continue the prompt. Once renewal completes, reload the app so nginx picks up the new certificate:
+
+```bash
+docker compose down
+docker compose up -d
+```
