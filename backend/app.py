@@ -2615,7 +2615,7 @@ def avalon_history_for_user(user_id, limit=None):
     history = []
     for game in games:
         events = db.execute(
-            "SELECT id, created_at, event_type, message FROM avalon_events WHERE game_id = ? ORDER BY created_at ASC, id ASC",
+            "SELECT id, created_at, event_type, message, payload_json FROM avalon_events WHERE game_id = ? ORDER BY created_at ASC, id ASC",
             (game["id"],),
         ).fetchall()
         players = avalon_game_players(game["id"])
